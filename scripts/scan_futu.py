@@ -603,7 +603,7 @@ def build_option_chain_rows(rows, today, leap_days):
 
 
 def build_top_option_alerts(records):
-    alerts = []
+    best_by_ticker = {}
     for record in records:
         for row in record.get("optionChain", []):
             volume = number(row.get("volume"))
@@ -628,29 +628,30 @@ def build_top_option_alerts(records):
                 reason.append("权利金流大")
             if not reason:
                 reason.append("高成交合约")
-            alerts.append(
-                {
-                    "ticker": record["ticker"],
-                    "name": record.get("name", record["ticker"]),
-                    "contract": row.get("code", ""),
-                    "type": row.get("type", ""),
-                    "expiration": row.get("expiration", ""),
-                    "daysToExpiration": row.get("daysToExpiration"),
-                    "strike": row.get("strike"),
-                    "volume": volume,
-                    "openInterest": oi,
-                    "volumeToOi": volume_to_oi,
-                    "premium": premium,
-                    "bid": row.get("bid"),
-                    "ask": row.get("ask"),
-                    "iv": row.get("iv"),
-                    "delta": row.get("delta"),
-                    "isLeap": is_leap,
-                    "score": round(min(100, surprise_score)),
-                    "reason": " / ".join(reason),
-                }
-            )
-    return sorted(alerts, key=lambda item: item["score"], reverse=True)[:5]
+            alert = {
+                "ticker": record["ticker"],
+                "name": record.get("name", record["ticker"]),
+                "contract": row.get("code", ""),
+                "type": row.get("type", ""),
+                "expiration": row.get("expiration", ""),
+                "daysToExpiration": row.get("daysToExpiration"),
+                "strike": row.get("strike"),
+                "volume": volume,
+                "openInterest": oi,
+                "volumeToOi": volume_to_oi,
+                "premium": premium,
+                "bid": row.get("bid"),
+                "ask": row.get("ask"),
+                "iv": row.get("iv"),
+                "delta": row.get("delta"),
+                "isLeap": is_leap,
+                "score": round(min(100, surprise_score)),
+                "reason": " / ".join(reason),
+            }
+            current = best_by_ticker.get(record["ticker"])
+            if current is None or alert["score"] > current["score"]:
+                best_by_ticker[record["ticker"]] = alert
+    return sorted(best_by_ticker.values(), key=lambda item: item["score"], reverse=True)[:5]
 
 
 def infer_option_type(row):

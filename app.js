@@ -167,7 +167,7 @@ async function loadGeneratedReport({ silent = false } = {}) {
     const report = await response.json();
     if (!Array.isArray(report.records)) throw new Error("报告格式不正确");
     records = report.records.map(normalizeRecord);
-    topOptionAlerts = Array.isArray(report.topOptionAlerts) ? report.topOptionAlerts : buildTopOptionAlerts(records);
+    topOptionAlerts = Array.isArray(report.topOptionAlerts) ? dedupeOptionAlerts(report.topOptionAlerts) : buildTopStockOptionAlerts(records);
     selectedTicker = records[0]?.ticker || "";
     saveRecords();
     renderAll();
@@ -185,7 +185,7 @@ async function loadReportFromApi({ date, generatedAt } = {}) {
   if (!response.ok) throw new Error((await response.json()).error || "读取历史报告失败");
   const report = await response.json();
   records = report.records.map(normalizeRecord);
-  topOptionAlerts = Array.isArray(report.topOptionAlerts) ? report.topOptionAlerts : buildTopOptionAlerts(records);
+  topOptionAlerts = Array.isArray(report.topOptionAlerts) ? dedupeOptionAlerts(report.topOptionAlerts) : buildTopStockOptionAlerts(records);
   selectedTicker = records[0]?.ticker || "";
   saveRecords();
   renderAll();
@@ -590,8 +590,26 @@ function buildTopOptionAlerts(sourceRecords) {
   return alerts.sort((a, b) => b.score - a.score).slice(0, 5);
 }
 
+function dedupeOptionAlerts(alerts) {
+  const bestByTicker = new Map();
+  for (const alert of alerts) {
+    const ticker = String(alert.ticker || "").toUpperCase();
+    if (!ticker) continue;
+    const normalized = { ...alert, ticker };
+    const current = bestByTicker.get(ticker);
+    if (!current || number(normalized.score) > number(current.score)) {
+      bestByTicker.set(ticker, normalized);
+    }
+  }
+  return Array.from(bestByTicker.values()).sort((a, b) => number(b.score) - number(a.score)).slice(0, 5);
+}
+
+function buildTopStockOptionAlerts(sourceRecords) {
+  return dedupeOptionAlerts(buildTopOptionAlerts(sourceRecords));
+}
+
 function renderOptionAlerts() {
-  const alerts = topOptionAlerts.length ? topOptionAlerts : buildTopOptionAlerts(records);
+  const alerts = topOptionAlerts.length ? dedupeOptionAlerts(topOptionAlerts) : buildTopStockOptionAlerts(records);
   if (!els.optionAlertRows) return;
   els.optionAlertRows.innerHTML = alerts.length
     ? alerts.map((alert) => `
@@ -614,6 +632,42 @@ function renderOptionAlerts() {
       renderAll();
     });
   });
+}
+
+function buildStockTradePlan(record) {
+  const score = scoreRecord(record);
+  const liquidity = inferLiquidity(record);
+  const theme = inferMarketTheme(record);
+  const stance =
+    record.oiTrend === "下降"
+      ? "股票避免新开仓，先观察期权资金是否重新回来。"
+      : score >= 78 && liquidity.label !== "不足"
+        ? "股票可以小仓试，等待 OI 和股价结构二次确认后再加。"
+        : score >= 62
+          ? "股票进入 watchlist，先等次日 OI、板块强度和股价关键位确认。"
+          : "只观察产业逻辑和资金流，不急着交易股票。";
+
+  return {
+    stance,
+    buy: [
+      "股价不破关键支撑，或放量突破最近平台后再考虑买入股票。",
+      `${record.hotContract || "最热远月合约"} 的 OI 次日继续增长，说明期权资金没有离场。`,
+      `主题判断维持在“${theme.label}”，且板块不是单票孤立异动。`
+    ],
+    add: [
+      "期权成交继续集中在 call 侧，C/P 没有快速回落。",
+      "股票成交额、股价趋势和相对强度同步放大。",
+      "新闻、财报、订单或产业链数据验证当前叙事。"
+    ],
+    sell: [
+      "LEAP call OI 停止增长或转为下降，说明跟踪逻辑降级。",
+      "股价跌破突破位或关键均线，且板块同步走弱。",
+      "估值预期无法兑现，或产业催化被证伪。"
+    ],
+    risk: liquidity.label === "不足"
+      ? "股票流动性不足时降低仓位，避免因为期权异动追高。"
+      : "期权只作为资金流证据，实际交易计划以股票价格结构为准。"
+  };
 }
 
 function renderStats() {
@@ -659,7 +713,7 @@ function generateNote(record) {
   const liquidity = inferLiquidity(record);
   const valuation = inferValuation(record);
   const research = inferResearchProfile(record);
-  const plan = buildTradePlan(record);
+  const plan = buildStockTradePlan(record);
 
   return `
     <div class="summary-grid">
@@ -689,7 +743,7 @@ function generateNote(record) {
       <li>竞争/对标：${research.competitors}</li>
     </ul>
 
-    <h4>5. 买入卖出计划</h4>
+    <h4>5. 股票买入卖出计划</h4>
     <p>交易态度：<strong>${plan.stance}</strong></p>
     <div class="plan-grid">
       <section><h5>买入条件</h5><ul>${plan.buy.map((item) => `<li>${item}</li>`).join("")}</ul></section>
