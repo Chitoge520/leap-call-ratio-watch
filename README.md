@@ -148,6 +148,7 @@ npm start
 
 - 美股代码在富途里会转换成 `US.NOK`、`US.AAPL` 这种格式。
 - 第一次验证时建议把 `config/watchlist.json` 里的标的减少到 5-10 个，避免触发订阅/频率限制。
+- 富途 `get_option_chain` 限制每次时间跨度不超过 30 天，并且每 30 秒最多 10 次请求；扫描器已按到期日查询并自动节流，所以完整 watchlist 可能需要几分钟。
 - 如果报告为空，先降低 `minTotalOptionVolume` 和 `minLeapCallVolume`，确认链路能跑通。
 - OI 不是实时资金流，通常需要次日再看是否增长，用来确认“这笔钱是否留下来”。
 

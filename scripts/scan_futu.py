@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH = ROOT / "config" / "watchlist.json"
 DATA_DIR = ROOT / "data"
 REPORTS_DIR = ROOT / "reports"
+LAST_CHAIN_CALL_TS = 0
 
 
 def main():
@@ -84,19 +85,27 @@ def main():
 
 def fetch_symbol_options(quote_ctx, futu_code, leap_days):
     today = datetime.now().date()
-    start = today.strftime("%Y-%m-%d")
-    end = (today + timedelta(days=max(leap_days + 550, 730))).strftime("%Y-%m-%d")
+    horizon = today + timedelta(days=max(leap_days + 550, 730))
+    frames = []
+    expirations = fetch_expiration_dates(quote_ctx, futu_code, today, horizon)
 
-    ret, chain = quote_ctx.get_option_chain(
-        code=futu_code,
-        start=start,
-        end=end,
-        option_type=OptionType.ALL,
-    )
-    if ret != RET_OK:
-        raise RuntimeError(f"get_option_chain failed: {chain}")
-    if chain.empty:
+    for expiration in expirations:
+        throttle_chain_request()
+        ret, chain = quote_ctx.get_option_chain(
+            code=futu_code,
+            start=expiration.isoformat(),
+            end=expiration.isoformat(),
+            option_type=OptionType.ALL,
+        )
+        if ret != RET_OK:
+            raise RuntimeError(f"get_option_chain failed: {chain}")
+        if not chain.empty:
+            frames.append(chain)
+
+    if not frames:
         return []
+
+    chain = concat_frames(frames)
 
     option_codes = normalize_codes(chain)
     if not option_codes:
@@ -112,6 +121,27 @@ def fetch_symbol_options(quote_ctx, futu_code, leap_days):
         merged["code"] = code
         rows.append(merged)
     return rows
+
+
+def fetch_expiration_dates(quote_ctx, futu_code, today, horizon):
+    ret, data = quote_ctx.get_option_expiration_date(code=futu_code)
+    if ret != RET_OK:
+        raise RuntimeError(f"get_option_expiration_date failed: {data}")
+    expirations = []
+    for row in frame_to_records(data):
+        expiry = parse_date(row.get("strike_time"))
+        if expiry and today <= expiry <= horizon:
+            expirations.append(expiry)
+    return sorted(set(expirations))
+
+
+def throttle_chain_request():
+    global LAST_CHAIN_CALL_TS
+    now = time.monotonic()
+    wait = 3.2 - (now - LAST_CHAIN_CALL_TS)
+    if wait > 0:
+        time.sleep(wait)
+    LAST_CHAIN_CALL_TS = time.monotonic()
 
 
 def fetch_option_quotes(quote_ctx, option_codes):
@@ -151,6 +181,15 @@ def frame_to_records(frame):
     return json.loads(frame.to_json(orient="records", force_ascii=False))
 
 
+def concat_frames(frames):
+    try:
+        import pandas as pd
+
+        return pd.concat(frames, ignore_index=True).drop_duplicates()
+    except Exception:
+        return frames[0]
+
+
 def analyze_symbol(symbol, rows, leap_days):
     if not rows:
         return None
@@ -171,7 +210,12 @@ def analyze_symbol(symbol, rows, leap_days):
             or row.get("last_trade_time")
         )
         volume = number(row.get("volume") or row.get("option_volume"))
-        open_interest = number(row.get("open_interest") or row.get("net_open_interest"))
+        open_interest = number(
+            row.get("open_interest")
+            or row.get("option_open_interest")
+            or row.get("net_open_interest")
+            or row.get("option_net_open_interest")
+        )
         bid = number(row.get("bid_price") or row.get("bid"))
         ask = number(row.get("ask_price") or row.get("ask"))
         last = number(row.get("last_price") or row.get("price"))
