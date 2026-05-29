@@ -21,7 +21,7 @@ http://localhost:4173
 ## 当前功能
 
 - 异常榜：按综合评分、LEAP 比、C/P、权利金流排序。
-- 研究报告：自动生成单票观察报告，风格接近 NOK 示例。
+- 研究报告：自动生成单票观察报告，回答主线、流动性、估值、产业链和交易计划。
 - 数据录入：手动新增或更新 ticker。
 - JSON 导入/导出：方便把外部扫描结果粘贴进来。
 - 自动扫描：通过 Polygon Option Chain Snapshot API 拉取期权链快照。
@@ -29,6 +29,36 @@ http://localhost:4173
 - 自动发送：支持 Resend 邮件 API 或通用 Webhook。
 - 本地保存：数据保存在浏览器 localStorage。
 - 示例数据：内置 NOK、INTC、T、PLTR。
+
+## 五段式研究报告
+
+每只股票的研究页会回答：
+
+```text
+1. 这只股票是否是现在市场上的主线
+2. 这只股票是否有充足成交量
+3. 这只股票的估值是否有预期
+4. 当前研究深度如何，上下游产业链是什么
+5. 根据数据生成买入、加仓、卖出/降级计划
+```
+
+可选补充字段：
+
+```json
+{
+  "stockDollarVolume": 420000000,
+  "relativeStrength": 72,
+  "marketTheme": "疑似",
+  "valuationView": "有重估预期",
+  "researchLevel": "中",
+  "industry": "通信设备 / AI 网络基础设施",
+  "upstream": "光模块、射频器件、芯片",
+  "downstream": "运营商、云厂商、政府/国防",
+  "competitors": "ERIC、CSCO、CIEN、ANET"
+}
+```
+
+如果这些字段为空，系统会根据主题、期权结构、成交量和内置行业知识先生成自动判断。
 
 ## 自动获取期权数据
 
@@ -127,6 +157,29 @@ FUTU_OPEND_PORT=11111
 ```bash
 npm run scan:futu
 ```
+
+如果要按“股票成交额超过 10 亿美元”的美股股票池扫描，而不是使用 `config/watchlist.json`，运行：
+
+```bash
+npm run scan:futu:liquid
+```
+
+这会先从富途美股基础池获取股票列表，再批量读取快照，用 `turnover >= 1,000,000,000` 筛选股票，最后扫描这些股票的期权链。
+
+可选环境变量：
+
+```text
+FUTU_USE_DOLLAR_VOLUME_UNIVERSE=1
+FUTU_MIN_STOCK_DOLLAR_VOLUME=1000000000
+FUTU_MAX_SYMBOLS=20
+FUTU_MAX_DAYS=420
+```
+
+说明：
+
+- 不设置 `FUTU_MAX_SYMBOLS` 时，会尽量扫描所有成交额超过 10 亿美元的股票。
+- 设置 `FUTU_MAX_SYMBOLS=20` 可以先验证前 20 只，速度更可控。
+- `FUTU_MAX_DAYS` 控制扫描未来多少期权到期日；数值越大，越慢，但覆盖 LEAP 更完整。
 
 它会生成：
 

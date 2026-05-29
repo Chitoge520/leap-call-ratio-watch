@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 try:
-    from futu import OpenQuoteContext, OptionType, RET_OK, SubType
+    from futu import Market, OpenQuoteContext, OptionType, RET_OK, SecurityType, SubType
 except ImportError as exc:
     raise SystemExit(
         "Missing futu-api. Install it with: pip install -r requirements-futu.txt"
@@ -18,6 +18,7 @@ CONFIG_PATH = ROOT / "config" / "watchlist.json"
 DATA_DIR = ROOT / "data"
 REPORTS_DIR = ROOT / "reports"
 LAST_CHAIN_CALL_TS = 0
+STOCK_META = {}
 
 
 def main():
@@ -25,7 +26,9 @@ def main():
     config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     host = os.getenv("FUTU_OPEND_HOST", "127.0.0.1")
     port = int(os.getenv("FUTU_OPEND_PORT", "11111"))
-    symbols = config["symbols"][: config.get("maxSymbolsPerRun", len(config["symbols"]))]
+    use_dollar_volume_universe = os.getenv("FUTU_USE_DOLLAR_VOLUME_UNIVERSE", "0") == "1"
+    default_max_symbols = 9999 if use_dollar_volume_universe else config.get("maxSymbolsPerRun", len(config["symbols"]))
+    max_symbols = int(os.getenv("FUTU_MAX_SYMBOLS", default_max_symbols))
     leap_days = int(config.get("leapDays", 180))
 
     DATA_DIR.mkdir(exist_ok=True)
@@ -36,6 +39,11 @@ def main():
     errors = []
 
     try:
+        if use_dollar_volume_universe:
+            symbols = build_dollar_volume_universe(quote_ctx, max_symbols)
+        else:
+            symbols = config["symbols"][:max_symbols]
+
         for symbol in symbols:
             futu_code = to_futu_us_code(symbol)
             try:
@@ -66,6 +74,7 @@ def main():
             "errors": len(errors),
         },
         "records": records,
+        "topOptionAlerts": build_top_option_alerts(records),
         "errors": errors,
     }
 
@@ -85,11 +94,13 @@ def main():
 
 def fetch_symbol_options(quote_ctx, futu_code, leap_days):
     today = datetime.now().date()
-    horizon = today + timedelta(days=max(leap_days + 550, 730))
+    max_days = int(os.getenv("FUTU_MAX_DAYS", max(leap_days + 550, 730)))
+    horizon = today + timedelta(days=max_days)
     frames = []
     expirations = fetch_expiration_dates(quote_ctx, futu_code, today, horizon)
 
-    for expiration in expirations:
+    max_expirations = int(os.getenv("FUTU_MAX_EXPIRATIONS", len(expirations)))
+    for expiration in expirations[:max_expirations]:
         throttle_chain_request()
         ret, chain = quote_ctx.get_option_chain(
             code=futu_code,
@@ -121,6 +132,67 @@ def fetch_symbol_options(quote_ctx, futu_code, leap_days):
         merged["code"] = code
         rows.append(merged)
     return rows
+
+
+def build_dollar_volume_universe(quote_ctx, max_symbols):
+    min_turnover = float(os.getenv("FUTU_MIN_STOCK_DOLLAR_VOLUME", "1000000000"))
+    sample_limit = int(os.getenv("FUTU_UNIVERSE_SAMPLE_LIMIT", "0"))
+    batch_size = int(os.getenv("FUTU_SNAPSHOT_BATCH_SIZE", "300"))
+
+    ret, stocks = quote_ctx.get_stock_basicinfo(Market.US, SecurityType.STOCK)
+    if ret != RET_OK:
+        raise RuntimeError(f"get_stock_basicinfo failed: {stocks}")
+
+    rows = frame_to_records(stocks)
+    candidates = []
+    for row in rows:
+        code = row.get("code", "")
+        ticker = code_to_symbol(code)
+        exchange = row.get("exchange_type", "")
+        if not ticker:
+            continue
+        if row.get("delisting") is True or row.get("suspension") is True:
+            continue
+        if exchange not in {"US_NASDAQ", "US_NYSE", "US_AMEX"}:
+            continue
+        candidates.append(code)
+
+    if sample_limit > 0:
+        candidates = candidates[:sample_limit]
+
+    liquid = []
+    for start in range(0, len(candidates), batch_size):
+        batch = candidates[start : start + batch_size]
+        ret, snapshot = quote_ctx.get_market_snapshot(batch)
+        if ret != RET_OK:
+            continue
+        for row in frame_to_records(snapshot):
+            turnover = number(row.get("turnover"))
+            code = row.get("code", "")
+            symbol = code_to_symbol(code)
+            if symbol and turnover >= min_turnover:
+                STOCK_META[symbol] = {
+                    "name": row.get("name") or infer_name(symbol),
+                    "stockDollarVolume": turnover,
+                    "lastPrice": number(row.get("last_price")),
+                    "stockVolume": number(row.get("volume")),
+                }
+                liquid.append({"symbol": symbol, "turnover": turnover})
+        time.sleep(0.25)
+
+    liquid.sort(key=lambda item: item["turnover"], reverse=True)
+    return [item["symbol"] for item in liquid[:max_symbols]]
+
+
+def code_to_symbol(code):
+    if not isinstance(code, str) or not code.startswith("US."):
+        return ""
+    symbol = code.split(".", 1)[1]
+    if not symbol.replace(".", "").replace("-", "").isalpha():
+        return ""
+    if len(symbol) > 8:
+        return ""
+    return symbol
 
 
 def fetch_expiration_dates(quote_ctx, futu_code, today, horizon):
@@ -255,6 +327,9 @@ def analyze_symbol(symbol, rows, leap_days):
     leap_call_oi = sum_item(leap_calls, "openInterest")
     total_call_oi = sum_item(calls, "openInterest")
     hot = max(leap_calls, key=lambda item: item["volume"], default={})
+    company_name = STOCK_META.get(symbol, {}).get("name") or infer_name(symbol, rows)
+    stock_dollar_volume = STOCK_META.get(symbol, {}).get("stockDollarVolume", 0)
+    option_chain_rows = build_option_chain_rows(rows, today, leap_days)
     score = score_record(
         leap_ratio=leap_ratio,
         cp_ratio=cp_ratio,
@@ -266,7 +341,7 @@ def analyze_symbol(symbol, rows, leap_days):
 
     return {
         "ticker": symbol,
-        "name": symbol,
+        "name": company_name,
         "theme": infer_theme(symbol),
         "date": today.isoformat(),
         "cpRatio": cp_ratio,
@@ -284,6 +359,7 @@ def analyze_symbol(symbol, rows, leap_days):
         "hotContractOi": hot.get("openInterest", 0),
         "hotContractPremium": hot.get("premium", 0),
         "premiumFlow": premium_flow,
+        "stockDollarVolume": stock_dollar_volume,
         "streak": 1,
         "oiTrend": "未知",
         "catalyst": "",
@@ -291,7 +367,99 @@ def analyze_symbol(symbol, rows, leap_days):
         "score": score,
         "flowType": classify(score, leap_ratio, cp_ratio, premium_flow),
         "note": build_research_note(symbol, cp_ratio, leap_ratio, total_volume, total_call_volume, premium_flow, hot.get("ticker", ""), score),
+        "optionChain": option_chain_rows,
     }
+
+
+def build_option_chain_rows(rows, today, leap_days):
+    items = []
+    cutoff = today + timedelta(days=leap_days)
+    for row in rows:
+        option_type = infer_option_type(row)
+        expiration = parse_date(row.get("strike_time") or row.get("expiration") or row.get("expiry_date"))
+        volume = number(row.get("volume") or row.get("option_volume"))
+        open_interest = number(
+            row.get("open_interest")
+            or row.get("option_open_interest")
+            or row.get("net_open_interest")
+            or row.get("option_net_open_interest")
+        )
+        bid = number(row.get("bid_price") or row.get("bid"))
+        ask = number(row.get("ask_price") or row.get("ask"))
+        last = number(row.get("last_price") or row.get("price"))
+        price = midpoint(bid, ask) or last
+        items.append(
+            {
+                "code": row.get("code", ""),
+                "name": row.get("name", ""),
+                "type": option_type,
+                "expiration": expiration.isoformat() if expiration else "",
+                "daysToExpiration": (expiration - today).days if expiration else None,
+                "strike": number(row.get("strike_price") or row.get("option_strike_price")),
+                "volume": volume,
+                "openInterest": open_interest,
+                "bid": bid,
+                "ask": ask,
+                "last": last,
+                "mid": price,
+                "premium": volume * price * 100,
+                "iv": number(row.get("option_implied_volatility")),
+                "delta": number(row.get("option_delta")),
+                "isLeap": bool(expiration and expiration >= cutoff),
+            }
+        )
+    return sorted(items, key=lambda item: (not item["isLeap"], -item["volume"]))[:250]
+
+
+def build_top_option_alerts(records):
+    alerts = []
+    for record in records:
+        for row in record.get("optionChain", []):
+            volume = number(row.get("volume"))
+            oi = number(row.get("openInterest"))
+            premium = number(row.get("premium"))
+            is_leap = bool(row.get("isLeap"))
+            is_call = row.get("type") == "call"
+            volume_to_oi = volume / max(oi, 1)
+            surprise_score = (
+                normalize(volume, 25_000) * 35
+                + normalize(premium, 5_000_000) * 25
+                + normalize(volume_to_oi, 1.5) * 20
+                + (15 if is_leap and is_call else 0)
+                + (5 if is_call else 0)
+            )
+            reason = []
+            if is_leap and is_call:
+                reason.append("LEAP call")
+            if volume_to_oi >= 1:
+                reason.append("成交量接近/超过 OI")
+            if premium >= 2_000_000:
+                reason.append("权利金流大")
+            if not reason:
+                reason.append("高成交合约")
+            alerts.append(
+                {
+                    "ticker": record["ticker"],
+                    "name": record.get("name", record["ticker"]),
+                    "contract": row.get("code", ""),
+                    "type": row.get("type", ""),
+                    "expiration": row.get("expiration", ""),
+                    "daysToExpiration": row.get("daysToExpiration"),
+                    "strike": row.get("strike"),
+                    "volume": volume,
+                    "openInterest": oi,
+                    "volumeToOi": volume_to_oi,
+                    "premium": premium,
+                    "bid": row.get("bid"),
+                    "ask": row.get("ask"),
+                    "iv": row.get("iv"),
+                    "delta": row.get("delta"),
+                    "isLeap": is_leap,
+                    "score": round(min(100, surprise_score)),
+                    "reason": " / ".join(reason),
+                }
+            )
+    return sorted(alerts, key=lambda item: item["score"], reverse=True)[:5]
 
 
 def infer_option_type(row):
@@ -401,6 +569,35 @@ def infer_theme(symbol):
         "SOFI": "金融科技盈利能力和信贷周期改善",
     }
     return themes.get(symbol, "")
+
+
+def infer_name(symbol, rows=None):
+    names = {
+        "NOK": "Nokia",
+        "INTC": "Intel",
+        "T": "AT&T",
+        "PLTR": "Palantir",
+        "AAPL": "Apple",
+        "MSFT": "Microsoft",
+        "NVDA": "NVIDIA",
+        "AMD": "AMD",
+        "TSLA": "Tesla",
+        "AMZN": "Amazon",
+        "GOOGL": "Alphabet",
+        "META": "Meta Platforms",
+        "SMCI": "Super Micro Computer",
+        "SOFI": "SoFi Technologies",
+        "RIVN": "Rivian"
+    }
+    if symbol in names:
+        return names[symbol]
+    if rows:
+        for row in rows:
+            owner = row.get("stock_owner") or ""
+            name = row.get("stock_owner_name") or row.get("owner_name")
+            if owner.endswith(f".{symbol}") and name:
+                return str(name)
+    return symbol
 
 
 def load_dotenv(path):

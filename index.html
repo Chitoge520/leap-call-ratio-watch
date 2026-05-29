@@ -13,7 +13,7 @@
           <div class="brand-mark">LC</div>
           <div>
             <h1>LEAP Watch</h1>
-            <p>远月 Call 异常监控</p>
+            <p>盘后期权主线研究</p>
           </div>
         </div>
 
@@ -40,7 +40,7 @@
           <div class="topbar-actions">
             <label class="search">
               <span>⌕</span>
-              <input id="searchInput" type="search" placeholder="搜索 ticker / 逻辑 / 合约" />
+              <input id="searchInput" type="search" placeholder="搜索 ticker / 主线 / 产业链 / 合约" />
             </label>
             <button id="resetData" class="icon-btn" title="恢复示例数据">↺</button>
             <button id="loadAutoReport" class="icon-btn" title="读取自动扫描报告">⇣</button>
@@ -67,6 +67,32 @@
             </article>
           </div>
 
+          <section class="option-alert-panel">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Contract Level Alerts</p>
+                <h3>Top 5 期权异动榜</h3>
+              </div>
+              <span>寻找突然上榜的单个合约和 LEAP call 暴增</span>
+            </div>
+            <div class="table-frame compact-frame">
+              <table class="option-alert-table">
+                <thead>
+                  <tr>
+                    <th>标的</th>
+                    <th>合约</th>
+                    <th>评分</th>
+                    <th>到期/Strike</th>
+                    <th>Volume/OI</th>
+                    <th>权利金</th>
+                    <th>原因</th>
+                  </tr>
+                </thead>
+                <tbody id="optionAlertRows"></tbody>
+              </table>
+            </div>
+          </section>
+
           <div class="toolbar">
             <div class="segmented" aria-label="排序方式">
               <button class="segment active" data-sort="score">综合评分</button>
@@ -90,7 +116,8 @@
                   <th>LEAP 比</th>
                   <th>最热合约</th>
                   <th>Call 占比</th>
-                  <th>连续性</th>
+                  <th>主线</th>
+                  <th>流动性</th>
                   <th>资金性质</th>
                 </tr>
               </thead>
@@ -111,7 +138,7 @@
                 <span id="noteScore" class="score-pill">-</span>
               </header>
               <div id="noteContent" class="note-content">
-                <p>从左侧选择一个标的，系统会把期权结构、跨天连续性、资金性质、公司逻辑和风险点生成一份观察报告。</p>
+                <p>从左侧选择一个标的，系统会回答主线、流动性、估值预期、研究深度、产业链和交易计划。</p>
               </div>
             </article>
           </div>
@@ -128,10 +155,12 @@
                 <label>日期 <input name="date" type="date" /></label>
                 <label>C/P <input name="cpRatio" type="number" step="0.01" required /></label>
                 <label>LEAP 比 <input name="leapRatio" type="number" step="0.01" required /></label>
-                <label>总成交量 <input name="totalVolume" type="number" step="1" /></label>
+                <label>总期权成交量 <input name="totalVolume" type="number" step="1" /></label>
                 <label>Call 成交量 <input name="callVolume" type="number" step="1" /></label>
                 <label>最热合约 <input name="hotContract" placeholder="260618.C.15" /></label>
                 <label>权利金流 <input name="premiumFlow" type="number" step="1000" /></label>
+                <label>股票成交额 <input name="stockDollarVolume" type="number" step="1000000" placeholder="100000000" /></label>
+                <label>相对强度 <input name="relativeStrength" type="number" min="0" max="100" step="1" placeholder="0-100" /></label>
                 <label>连续上榜天数 <input name="streak" type="number" min="1" step="1" value="1" /></label>
                 <label>OI 趋势
                   <select name="oiTrend">
@@ -141,7 +170,34 @@
                     <option value="未知">未知</option>
                   </select>
                 </label>
+                <label>主线判断
+                  <select name="marketTheme">
+                    <option value="">自动判断</option>
+                    <option value="是">是</option>
+                    <option value="疑似">疑似</option>
+                    <option value="否">否</option>
+                  </select>
+                </label>
+                <label>估值预期 <input name="valuationView" placeholder="有重估预期 / 预期充分 / 低估修复" /></label>
+                <label>研究深度
+                  <select name="researchLevel">
+                    <option value="">自动判断</option>
+                    <option value="高">高</option>
+                    <option value="中">中</option>
+                    <option value="低">低</option>
+                  </select>
+                </label>
+                <label>行业位置 <input name="industry" placeholder="通信设备 / AI 网络基础设施" /></label>
               </div>
+              <label class="wide-label">上游产业链
+                <textarea name="upstream" rows="2" placeholder="芯片、光模块、设备、材料..."></textarea>
+              </label>
+              <label class="wide-label">下游产业链
+                <textarea name="downstream" rows="2" placeholder="云厂商、运营商、政府、企业客户..."></textarea>
+              </label>
+              <label class="wide-label">竞争/对标公司
+                <textarea name="competitors" rows="2" placeholder="ERIC、CSCO、ANET..."></textarea>
+              </label>
               <label class="wide-label">公司催化
                 <textarea name="catalyst" rows="4" placeholder="订单、财报、政策、行业周期、估值重估..."></textarea>
               </label>
@@ -153,7 +209,7 @@
 
             <section class="form-card">
               <h3>JSON 导入/导出</h3>
-              <p class="muted">第一版适合把你自己的扫描结果粘进来。后续可以把这里替换成 Polygon / ORATS / Tradier 接口。</p>
+              <p class="muted">可以粘贴富途/Polygon 扫描结果，也可以导入人工补充后的研究字段。</p>
               <textarea id="jsonBox" rows="13" spellcheck="false"></textarea>
               <div class="button-row">
                 <button id="importJson" class="secondary" type="button">导入 JSON</button>
@@ -167,22 +223,22 @@
         <section id="frameworkView" class="view">
           <div class="framework">
             <article>
-              <h3>异常评分逻辑</h3>
-              <p>系统把 LEAP 比、C/P、Call 占比、权利金流、连续上榜、OI 趋势合成一个 0-100 的研究优先级。评分不是买卖建议，而是告诉你哪只票最值得写成研究札记。</p>
+              <h3>每日 Top 20 流程</h3>
+              <p>盘后先按期权成交量聚合股票维度 Top 20，再进入本页做主线、流动性、估值、产业链和交易计划分析。当前富途数据源会按 watchlist 扫描，后续可以继续升级成全市场 Top 20 扫描。</p>
             </article>
             <article>
-              <h3>核心判断</h3>
+              <h3>五段式研究</h3>
               <ul>
-                <li>LEAP 比高：资金更愿意买远月，不只是赌今天波动。</li>
-                <li>C/P 高：方向性更偏 call，但仍要排除对冲和组合单。</li>
-                <li>连续上榜：从单日异动升级为跨天资金行为。</li>
-                <li>OI 增长：比成交量更重要，代表这笔钱可能没有走。</li>
-                <li>最热合约：看时间窗、strike 和 moneyness，判断资金押的是短炒还是重估。</li>
+                <li>主线判断：是否属于当前市场强势主题，是否有板块共振。</li>
+                <li>流动性：股票成交额、期权成交量、权利金流是否足够。</li>
+                <li>估值预期：是低估修复、预期差，还是预期已经充分。</li>
+                <li>研究深度：行业位置、上下游、竞争对手和关键问题。</li>
+                <li>交易计划：买入、加仓、卖出/降级条件。</li>
               </ul>
             </article>
             <article>
-              <h3>后续数据接口</h3>
-              <p>建议第二版增加后端任务：每日拉取期权链、成交、OI、Greeks、股票价格和新闻，再自动计算榜单。数据源可选 Polygon、ORATS、Tradier 或 Nasdaq Data Link，取决于预算和历史数据深度。</p>
+              <h3>风险提示</h3>
+              <p>报告用于盘后研究和交易计划，不是自动买卖建议。真正执行前仍要确认 OI 次日变化、bid-ask spread、股价结构、板块强弱和公司催化。</p>
             </article>
           </div>
         </section>
