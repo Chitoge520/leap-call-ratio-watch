@@ -1,0 +1,23 @@
+{
+  "symbols": [
+    "NOK",
+    "INTC",
+    "T",
+    "PLTR",
+    "AAPL",
+    "MSFT",
+    "NVDA",
+    "AMD",
+    "TSLA",
+    "AMZN",
+    "GOOGL",
+    "META",
+    "SMCI",
+    "SOFI",
+    "RIVN"
+  ],
+  "leapDays": 180,
+  "minTotalOptionVolume": 5000,
+  "minLeapCallVolume": 250,
+  "maxSymbolsPerRun": 80
+}

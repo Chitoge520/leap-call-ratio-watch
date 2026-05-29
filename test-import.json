@@ -1,0 +1,34 @@
+[
+  {
+    "ticker": "RIVN",
+    "name": "Rivian",
+    "theme": "低价成长股产能改善与战略投资预期",
+    "date": "2026-05-27",
+    "cpRatio": 3.75,
+    "leapRatio": 12.2,
+    "totalVolume": 141000,
+    "callVolume": 109000,
+    "hotContract": "RIVN260618C00025000",
+    "premiumFlow": 11200000,
+    "streak": 2,
+    "oiTrend": "增长",
+    "catalyst": "远月 call 可能在押交付改善、成本下降和战略合作带来的估值修复。",
+    "risk": "现金消耗和低价股情绪噪音较大，若 OI 不增长要快速降级。"
+  },
+  {
+    "ticker": "AMD",
+    "name": "AMD",
+    "theme": "AI GPU 份额提升和服务器 CPU 周期",
+    "date": "2026-05-27",
+    "cpRatio": 2.22,
+    "leapRatio": 5.4,
+    "totalVolume": 366000,
+    "callVolume": 248000,
+    "hotContract": "AMD270115C00250000",
+    "premiumFlow": 28600000,
+    "streak": 1,
+    "oiTrend": "未知",
+    "catalyst": "大额远月权利金可能押 AI GPU 订单和数据中心业务继续扩张。",
+    "risk": "权利金大但 C/P 不极端，可能混有机构对冲或滚仓。"
+  }
+]

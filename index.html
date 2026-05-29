@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LEAP Call Ratio 异常监控台</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">LC</div>
+          <div>
+            <h1>LEAP Watch</h1>
+            <p>远月 Call 异常监控</p>
+          </div>
+        </div>
+
+        <nav class="nav">
+          <button class="nav-button active" data-view="dashboard">异常榜</button>
+          <button class="nav-button" data-view="research">研究报告</button>
+          <button class="nav-button" data-view="pipeline">数据录入</button>
+          <button class="nav-button" data-view="framework">监控框架</button>
+        </nav>
+
+        <section class="side-panel">
+          <span>当前样本</span>
+          <strong id="sampleCount">0</strong>
+          <p id="sideSummary">等待载入数据</p>
+        </section>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">US Options Flow Research</p>
+            <h2 id="pageTitle">异常榜</h2>
+          </div>
+          <div class="topbar-actions">
+            <label class="search">
+              <span>⌕</span>
+              <input id="searchInput" type="search" placeholder="搜索 ticker / 逻辑 / 合约" />
+            </label>
+            <button id="resetData" class="icon-btn" title="恢复示例数据">↺</button>
+            <button id="loadAutoReport" class="icon-btn" title="读取自动扫描报告">⇣</button>
+          </div>
+        </header>
+
+        <section id="dashboardView" class="view active">
+          <div class="stats-grid">
+            <article>
+              <span>平均 LEAP 比</span>
+              <strong id="avgLeap">0.00</strong>
+            </article>
+            <article>
+              <span>平均 C/P</span>
+              <strong id="avgCp">0.00</strong>
+            </article>
+            <article>
+              <span>连续上榜</span>
+              <strong id="streakCount">0</strong>
+            </article>
+            <article>
+              <span>强信号</span>
+              <strong id="strongCount">0</strong>
+            </article>
+          </div>
+
+          <div class="toolbar">
+            <div class="segmented" aria-label="排序方式">
+              <button class="segment active" data-sort="score">综合评分</button>
+              <button class="segment" data-sort="leapRatio">LEAP 比</button>
+              <button class="segment" data-sort="cpRatio">C/P</button>
+              <button class="segment" data-sort="premiumFlow">权利金</button>
+            </div>
+            <label class="checkline">
+              <input type="checkbox" id="onlyActionable" />
+              只看可研究信号
+            </label>
+          </div>
+
+          <div class="table-frame">
+            <table>
+              <thead>
+                <tr>
+                  <th>Ticker</th>
+                  <th>评分</th>
+                  <th>C/P</th>
+                  <th>LEAP 比</th>
+                  <th>最热合约</th>
+                  <th>Call 占比</th>
+                  <th>连续性</th>
+                  <th>资金性质</th>
+                </tr>
+              </thead>
+              <tbody id="alertRows"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="researchView" class="view">
+          <div class="research-layout">
+            <aside class="ticker-list" id="tickerList"></aside>
+            <article class="note">
+              <header class="note-head">
+                <div>
+                  <p class="eyebrow">Generated Research Note</p>
+                  <h3 id="noteTitle">选择一个标的</h3>
+                </div>
+                <span id="noteScore" class="score-pill">-</span>
+              </header>
+              <div id="noteContent" class="note-content">
+                <p>从左侧选择一个标的，系统会把期权结构、跨天连续性、资金性质、公司逻辑和风险点生成一份观察报告。</p>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section id="pipelineView" class="view">
+          <div class="pipeline-layout">
+            <form id="entryForm" class="form-card">
+              <h3>新增/更新观察记录</h3>
+              <div class="form-grid">
+                <label>Ticker <input name="ticker" required placeholder="NOK" /></label>
+                <label>公司名称 <input name="name" placeholder="Nokia" /></label>
+                <label>主题逻辑 <input name="theme" placeholder="AI 网络基础设施重估" /></label>
+                <label>日期 <input name="date" type="date" /></label>
+                <label>C/P <input name="cpRatio" type="number" step="0.01" required /></label>
+                <label>LEAP 比 <input name="leapRatio" type="number" step="0.01" required /></label>
+                <label>总成交量 <input name="totalVolume" type="number" step="1" /></label>
+                <label>Call 成交量 <input name="callVolume" type="number" step="1" /></label>
+                <label>最热合约 <input name="hotContract" placeholder="260618.C.15" /></label>
+                <label>权利金流 <input name="premiumFlow" type="number" step="1000" /></label>
+                <label>连续上榜天数 <input name="streak" type="number" min="1" step="1" value="1" /></label>
+                <label>OI 趋势
+                  <select name="oiTrend">
+                    <option value="增长">增长</option>
+                    <option value="持平">持平</option>
+                    <option value="下降">下降</option>
+                    <option value="未知">未知</option>
+                  </select>
+                </label>
+              </div>
+              <label class="wide-label">公司催化
+                <textarea name="catalyst" rows="4" placeholder="订单、财报、政策、行业周期、估值重估..."></textarea>
+              </label>
+              <label class="wide-label">风险和雷点
+                <textarea name="risk" rows="3" placeholder="meme、宽价差、OI 不增长、基本面兑现慢..."></textarea>
+              </label>
+              <button class="primary" type="submit">保存到监控台</button>
+            </form>
+
+            <section class="form-card">
+              <h3>JSON 导入/导出</h3>
+              <p class="muted">第一版适合把你自己的扫描结果粘进来。后续可以把这里替换成 Polygon / ORATS / Tradier 接口。</p>
+              <textarea id="jsonBox" rows="13" spellcheck="false"></textarea>
+              <div class="button-row">
+                <button id="importJson" class="secondary" type="button">导入 JSON</button>
+                <button id="exportJson" class="secondary" type="button">导出当前数据</button>
+              </div>
+              <pre id="jsonOutput"></pre>
+            </section>
+          </div>
+        </section>
+
+        <section id="frameworkView" class="view">
+          <div class="framework">
+            <article>
+              <h3>异常评分逻辑</h3>
+              <p>系统把 LEAP 比、C/P、Call 占比、权利金流、连续上榜、OI 趋势合成一个 0-100 的研究优先级。评分不是买卖建议，而是告诉你哪只票最值得写成研究札记。</p>
+            </article>
+            <article>
+              <h3>核心判断</h3>
+              <ul>
+                <li>LEAP 比高：资金更愿意买远月，不只是赌今天波动。</li>
+                <li>C/P 高：方向性更偏 call，但仍要排除对冲和组合单。</li>
+                <li>连续上榜：从单日异动升级为跨天资金行为。</li>
+                <li>OI 增长：比成交量更重要，代表这笔钱可能没有走。</li>
+                <li>最热合约：看时间窗、strike 和 moneyness，判断资金押的是短炒还是重估。</li>
+              </ul>
+            </article>
+            <article>
+              <h3>后续数据接口</h3>
+              <p>建议第二版增加后端任务：每日拉取期权链、成交、OI、Greeks、股票价格和新闻，再自动计算榜单。数据源可选 Polygon、ORATS、Tradier 或 Nasdaq Data Link，取决于预算和历史数据深度。</p>
+            </article>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

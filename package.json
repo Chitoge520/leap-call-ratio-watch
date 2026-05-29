@@ -1,0 +1,12 @@
+{
+  "name": "leap-call-ratio-watch",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "scan": "node scripts/scan.mjs",
+    "scan:alpha": "node scripts/scan-alpha-vantage.mjs",
+    "check": "node --check app.js && node --check server.mjs && node --check scripts/scan.mjs && node --check scripts/scan-alpha-vantage.mjs"
+  }
+}
