@@ -7,6 +7,7 @@
     "start": "node server.mjs",
     "scan": "node scripts/scan.mjs",
     "scan:alpha": "node scripts/scan-alpha-vantage.mjs",
+    "scan:futu": "python scripts/scan_futu.py",
     "check": "node --check app.js && node --check server.mjs && node --check scripts/scan.mjs && node --check scripts/scan-alpha-vantage.mjs"
   }
 }

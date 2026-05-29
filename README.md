@@ -90,6 +90,67 @@ npm run scan:alpha
 
 注意：免费 key 通常有严格频率限制，所以脚本默认最多扫描 watchlist 前 10 个标的，并在请求之间等待。若报告没有入选标的，可以临时降低 `config/watchlist.json` 里的 `minTotalOptionVolume` 和 `minLeapCallVolume`。
 
+### 富途 OpenD 数据源
+
+富途更适合本地盘后研究，因为程序通过本机 OpenD 网关读取行情。官方文档里，`get_option_chain` 用于通过标的股票查询期权链；它主要返回期权链静态信息，若要获取报价、成交、OI 等动态数据，需要用返回的期权合约代码再订阅/获取行情快照。
+
+参考：
+
+- 富途获取期权链：`https://openapi.futunn.com/futu-api-doc/quote/get-option-chain.html`
+- 富途行情接口总览：`https://openapi.futunn.com/futu-api-doc/quote/overview.html`
+- 富途 OpenAPI 下载：`https://www.futunn.com/en/download/OpenAPI`
+
+使用步骤：
+
+1. 安装并启动 Futu OpenD。
+2. 确认 OpenD 监听地址，一般是：
+
+```text
+127.0.0.1:11111
+```
+
+3. 安装 Python SDK：
+
+```bash
+pip install -r requirements-futu.txt
+```
+
+4. 如你修改过 OpenD 端口，在 `.env` 里设置：
+
+```text
+FUTU_OPEND_HOST=127.0.0.1
+FUTU_OPEND_PORT=11111
+```
+
+5. 运行富途扫描：
+
+```bash
+npm run scan:futu
+```
+
+它会生成：
+
+```text
+data/latest-report.json
+reports/YYYY-MM-DD-futu-leap-report.md
+reports/YYYY-MM-DD-futu-leap-report.html
+```
+
+然后启动 Web 端：
+
+```bash
+npm start
+```
+
+打开 `http://localhost:4173`，点击右上角 `⇣` 读取最新报告。
+
+注意事项：
+
+- 美股代码在富途里会转换成 `US.NOK`、`US.AAPL` 这种格式。
+- 第一次验证时建议把 `config/watchlist.json` 里的标的减少到 5-10 个，避免触发订阅/频率限制。
+- 如果报告为空，先降低 `minTotalOptionVolume` 和 `minLeapCallVolume`，确认链路能跑通。
+- OI 不是实时资金流，通常需要次日再看是否增长，用来确认“这笔钱是否留下来”。
+
 ## 自动发送报告
 
 ### 邮件发送
