@@ -541,6 +541,39 @@ tbody tr:hover {
   gap: 18px;
 }
 
+.history-layout {
+  display: grid;
+  gap: 18px;
+}
+
+.history-search {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.history-search input {
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbf8f1;
+  color: var(--ink);
+}
+
+.history-table {
+  min-width: 820px;
+}
+
+.mini-btn {
+  border: 0;
+  border-radius: 6px;
+  padding: 6px 10px;
+  background: var(--ink);
+  color: #fff;
+  cursor: pointer;
+}
+
 .form-card {
   padding: 22px;
 }
@@ -667,7 +700,8 @@ textarea {
   .summary-grid,
   .plan-grid,
   .research-layout,
-  .pipeline-layout {
+  .pipeline-layout,
+  .history-layout {
     grid-template-columns: 1fr;
   }
 }

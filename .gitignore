@@ -6,6 +6,8 @@ __pycache__/
 *.pyc
 npm-debug.log*
 reports/
+data/*.db
+data/*.db-*
 *.log
 .DS_Store
 Thumbs.db

@@ -1,6 +1,7 @@
 import json
 import math
 import os
+import sqlite3
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -17,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH = ROOT / "config" / "watchlist.json"
 DATA_DIR = ROOT / "data"
 REPORTS_DIR = ROOT / "reports"
+DB_PATH = DATA_DIR / "leap_watch.db"
 LAST_CHAIN_CALL_TS = 0
 STOCK_META = {}
 
@@ -84,12 +86,201 @@ def main():
     (DATA_DIR / "latest-report.json").write_text(
         json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
     )
+    save_report_to_db(report)
     (REPORTS_DIR / f"{date_stamp}-futu-leap-report.md").write_text(markdown, encoding="utf-8")
     (REPORTS_DIR / f"{date_stamp}-futu-leap-report.html").write_text(html, encoding="utf-8")
 
     print(f"Futu scan generated {len(records)} qualified records from {len(symbols)} symbols.")
     if errors:
         print(f"Completed with {len(errors)} symbol errors.")
+
+
+def save_report_to_db(report):
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+        init_db(conn)
+        generated_at = report["generatedAt"]
+        report_date = generated_at[:10]
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO scan_reports
+            (generated_at, report_date, source, scanned_symbols, qualified_symbols, errors_count, raw_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                generated_at,
+                report_date,
+                report.get("source", ""),
+                report["summary"].get("scannedSymbols", 0),
+                report["summary"].get("qualifiedSymbols", 0),
+                report["summary"].get("errors", 0),
+                json.dumps(report, ensure_ascii=False),
+            ),
+        )
+        conn.execute("DELETE FROM stock_records WHERE generated_at = ?", (generated_at,))
+        conn.execute("DELETE FROM option_alerts WHERE generated_at = ?", (generated_at,))
+        conn.execute("DELETE FROM option_chain_rows WHERE generated_at = ?", (generated_at,))
+
+        for record in report.get("records", []):
+            conn.execute(
+                """
+                INSERT INTO stock_records
+                (generated_at, report_date, ticker, name, score, cp_ratio, leap_ratio, total_volume,
+                 call_volume, premium_flow, stock_dollar_volume, hot_contract, flow_type, raw_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    generated_at,
+                    report_date,
+                    record.get("ticker", ""),
+                    record.get("name", ""),
+                    record.get("score", 0),
+                    record.get("cpRatio", 0),
+                    record.get("leapRatio", 0),
+                    record.get("totalVolume", 0),
+                    record.get("callVolume", 0),
+                    record.get("premiumFlow", 0),
+                    record.get("stockDollarVolume", 0),
+                    record.get("hotContract", ""),
+                    record.get("flowType", ""),
+                    json.dumps(record, ensure_ascii=False),
+                ),
+            )
+            for row in record.get("optionChain", []):
+                conn.execute(
+                    """
+                    INSERT INTO option_chain_rows
+                    (generated_at, report_date, ticker, contract, option_type, expiration, days_to_expiration,
+                     strike, volume, open_interest, premium, bid, ask, iv, delta, is_leap, raw_json)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        generated_at,
+                        report_date,
+                        record.get("ticker", ""),
+                        row.get("code", ""),
+                        row.get("type", ""),
+                        row.get("expiration", ""),
+                        row.get("daysToExpiration"),
+                        row.get("strike"),
+                        row.get("volume"),
+                        row.get("openInterest"),
+                        row.get("premium"),
+                        row.get("bid"),
+                        row.get("ask"),
+                        row.get("iv"),
+                        row.get("delta"),
+                        1 if row.get("isLeap") else 0,
+                        json.dumps(row, ensure_ascii=False),
+                    ),
+                )
+
+        for alert in report.get("topOptionAlerts", []):
+            conn.execute(
+                """
+                INSERT INTO option_alerts
+                (generated_at, report_date, ticker, name, contract, score, reason, volume,
+                 open_interest, volume_to_oi, premium, is_leap, raw_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    generated_at,
+                    report_date,
+                    alert.get("ticker", ""),
+                    alert.get("name", ""),
+                    alert.get("contract", ""),
+                    alert.get("score", 0),
+                    alert.get("reason", ""),
+                    alert.get("volume", 0),
+                    alert.get("openInterest", 0),
+                    alert.get("volumeToOi", 0),
+                    alert.get("premium", 0),
+                    1 if alert.get("isLeap") else 0,
+                    json.dumps(alert, ensure_ascii=False),
+                ),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def init_db(conn):
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS scan_reports (
+            generated_at TEXT PRIMARY KEY,
+            report_date TEXT NOT NULL,
+            source TEXT,
+            scanned_symbols INTEGER,
+            qualified_symbols INTEGER,
+            errors_count INTEGER,
+            raw_json TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_scan_reports_date ON scan_reports(report_date DESC);
+
+        CREATE TABLE IF NOT EXISTS stock_records (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            generated_at TEXT NOT NULL,
+            report_date TEXT NOT NULL,
+            ticker TEXT NOT NULL,
+            name TEXT,
+            score REAL,
+            cp_ratio REAL,
+            leap_ratio REAL,
+            total_volume REAL,
+            call_volume REAL,
+            premium_flow REAL,
+            stock_dollar_volume REAL,
+            hot_contract TEXT,
+            flow_type TEXT,
+            raw_json TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_stock_records_ticker_date ON stock_records(ticker, report_date DESC);
+        CREATE INDEX IF NOT EXISTS idx_stock_records_date_score ON stock_records(report_date DESC, score DESC);
+
+        CREATE TABLE IF NOT EXISTS option_alerts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            generated_at TEXT NOT NULL,
+            report_date TEXT NOT NULL,
+            ticker TEXT,
+            name TEXT,
+            contract TEXT,
+            score REAL,
+            reason TEXT,
+            volume REAL,
+            open_interest REAL,
+            volume_to_oi REAL,
+            premium REAL,
+            is_leap INTEGER,
+            raw_json TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_option_alerts_date_score ON option_alerts(report_date DESC, score DESC);
+
+        CREATE TABLE IF NOT EXISTS option_chain_rows (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            generated_at TEXT NOT NULL,
+            report_date TEXT NOT NULL,
+            ticker TEXT,
+            contract TEXT,
+            option_type TEXT,
+            expiration TEXT,
+            days_to_expiration INTEGER,
+            strike REAL,
+            volume REAL,
+            open_interest REAL,
+            premium REAL,
+            bid REAL,
+            ask REAL,
+            iv REAL,
+            delta REAL,
+            is_leap INTEGER,
+            raw_json TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_option_chain_ticker_date ON option_chain_rows(ticker, report_date DESC);
+        CREATE INDEX IF NOT EXISTS idx_option_chain_date_volume ON option_chain_rows(report_date DESC, volume DESC);
+        """
+    )
 
 
 def fetch_symbol_options(quote_ctx, futu_code, leap_days):

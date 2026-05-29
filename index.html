@@ -20,6 +20,7 @@
         <nav class="nav">
           <button class="nav-button active" data-view="dashboard">异常榜</button>
           <button class="nav-button" data-view="research">研究报告</button>
+          <button class="nav-button" data-view="history">历史查询</button>
           <button class="nav-button" data-view="pipeline">数据录入</button>
           <button class="nav-button" data-view="framework">监控框架</button>
         </nav>
@@ -216,6 +217,59 @@
                 <button id="exportJson" class="secondary" type="button">导出当前数据</button>
               </div>
               <pre id="jsonOutput"></pre>
+            </section>
+          </div>
+        </section>
+
+        <section id="historyView" class="view">
+          <div class="history-layout">
+            <section class="form-card">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow">Saved Reports</p>
+                  <h3>历史扫描报告</h3>
+                </div>
+                <button id="refreshHistory" class="secondary" type="button">刷新</button>
+              </div>
+              <div class="table-frame compact-frame">
+                <table class="history-table">
+                  <thead>
+                    <tr>
+                      <th>日期</th>
+                      <th>时间</th>
+                      <th>来源</th>
+                      <th>扫描</th>
+                      <th>入选</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="historyReportRows"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="form-card">
+              <h3>单票历史</h3>
+              <div class="history-search">
+                <input id="historyTicker" placeholder="输入 ticker，例如 NVDA" />
+                <button id="loadTickerHistory" class="secondary" type="button">查询</button>
+              </div>
+              <div class="table-frame compact-frame">
+                <table class="history-table">
+                  <thead>
+                    <tr>
+                      <th>日期</th>
+                      <th>评分</th>
+                      <th>C/P</th>
+                      <th>LEAP 比</th>
+                      <th>期权量</th>
+                      <th>权利金</th>
+                      <th>最热合约</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tickerHistoryRows"></tbody>
+                </table>
+              </div>
             </section>
           </div>
         </section>

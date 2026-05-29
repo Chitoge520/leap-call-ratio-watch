@@ -129,6 +129,11 @@ const els = {
   onlyActionable: document.querySelector("#onlyActionable"),
   alertRows: document.querySelector("#alertRows"),
   optionAlertRows: document.querySelector("#optionAlertRows"),
+  refreshHistory: document.querySelector("#refreshHistory"),
+  historyReportRows: document.querySelector("#historyReportRows"),
+  historyTicker: document.querySelector("#historyTicker"),
+  loadTickerHistory: document.querySelector("#loadTickerHistory"),
+  tickerHistoryRows: document.querySelector("#tickerHistoryRows"),
   tickerList: document.querySelector("#tickerList"),
   noteTitle: document.querySelector("#noteTitle"),
   noteScore: document.querySelector("#noteScore"),
@@ -169,6 +174,74 @@ async function loadGeneratedReport({ silent = false } = {}) {
     if (!silent) alert(`已载入自动扫描报告：${records.length} 条记录`);
   } catch (error) {
     if (!silent) alert(`读取失败：${error.message}。请先运行 npm run scan:futu，并通过 npm start 打开网页。`);
+  }
+}
+
+async function loadReportFromApi({ date, generatedAt } = {}) {
+  const params = new URLSearchParams();
+  if (date) params.set("date", date);
+  if (generatedAt) params.set("generatedAt", generatedAt);
+  const response = await fetch(`/api/report?${params.toString()}`, { cache: "no-store" });
+  if (!response.ok) throw new Error((await response.json()).error || "读取历史报告失败");
+  const report = await response.json();
+  records = report.records.map(normalizeRecord);
+  topOptionAlerts = Array.isArray(report.topOptionAlerts) ? report.topOptionAlerts : buildTopOptionAlerts(records);
+  selectedTicker = records[0]?.ticker || "";
+  saveRecords();
+  renderAll();
+}
+
+async function renderHistoryReports() {
+  if (!els.historyReportRows) return;
+  try {
+    const response = await fetch("/api/reports", { cache: "no-store" });
+    if (!response.ok) throw new Error((await response.json()).error || "没有历史数据");
+    const payload = await response.json();
+    els.historyReportRows.innerHTML = payload.reports.length
+      ? payload.reports.map((report) => `
+        <tr>
+          <td>${report.report_date}</td>
+          <td>${String(report.generated_at || "").slice(11, 19)}</td>
+          <td>${report.source || "-"}</td>
+          <td>${report.scanned_symbols}</td>
+          <td>${report.qualified_symbols}</td>
+          <td><button class="mini-btn" data-generated-at="${report.generated_at}">载入</button></td>
+        </tr>
+      `).join("")
+      : `<tr><td colspan="6">暂无历史报告。请先运行 npm run scan:futu。</td></tr>`;
+    document.querySelectorAll(".mini-btn[data-generated-at]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        await loadReportFromApi({ generatedAt: button.dataset.generatedAt });
+        switchView("dashboard");
+      });
+    });
+  } catch (error) {
+    els.historyReportRows.innerHTML = `<tr><td colspan="6">${error.message}</td></tr>`;
+  }
+}
+
+async function renderTickerHistory() {
+  const ticker = els.historyTicker.value.trim().toUpperCase();
+  if (!ticker) return;
+  try {
+    const response = await fetch(`/api/history?ticker=${encodeURIComponent(ticker)}`, { cache: "no-store" });
+    if (!response.ok) throw new Error((await response.json()).error || "查询失败");
+    const payload = await response.json();
+    els.tickerHistoryRows.innerHTML = payload.history.length
+      ? payload.history.map((row) => `
+        <tr>
+          <td>${row.report_date}</td>
+          <td>${number(row.score).toFixed(0)}</td>
+          <td>${number(row.cp_ratio).toFixed(2)}</td>
+          <td>${number(row.leap_ratio).toFixed(2)}</td>
+          <td>${compactNumber(row.total_volume)}</td>
+          <td>${compactNumber(row.premium_flow)}</td>
+          <td>${row.hot_contract || "-"}</td>
+        </tr>
+      `).join("")
+      : `<tr><td colspan="7">没有找到 ${ticker} 的历史记录。</td></tr>`;
+  } catch (error) {
+    els.tickerHistoryRows.innerHTML = `<tr><td colspan="7">${error.message}</td></tr>`;
   }
 }
 
@@ -658,10 +731,12 @@ function switchView(view) {
   const titleMap = {
     dashboard: "异常榜",
     research: "研究报告",
+    history: "历史查询",
     pipeline: "数据录入",
     framework: "监控框架"
   };
   els.pageTitle.textContent = titleMap[view];
+  if (view === "history") renderHistoryReports();
 }
 
 function readForm(form) {
@@ -719,6 +794,12 @@ els.resetData.addEventListener("click", () => {
 
 els.loadAutoReport.addEventListener("click", () => {
   loadGeneratedReport();
+});
+
+els.refreshHistory?.addEventListener("click", renderHistoryReports);
+els.loadTickerHistory?.addEventListener("click", renderTickerHistory);
+els.historyTicker?.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") renderTickerHistory();
 });
 
 els.entryForm.addEventListener("submit", (event) => {
