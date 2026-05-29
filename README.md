@@ -233,6 +233,37 @@ npm run scan
 REPORT_WEBHOOK_URL=https://your-webhook-url
 ```
 
+## AI 分析层
+
+AI 分析层只基于富途 OpenD 采集到的真实数据、期权链、OI、成交量和权利金做研究，不编造新闻或估值数字。输出的交易计划是股票买入/卖出计划，期权只作为资金流证据。
+
+在 `.env` 中配置：
+
+```text
+OPENAI_API_KEY=你的 API Key
+OPENAI_MODEL=gpt-4.1-mini
+OPENAI_BASE_URL=https://api.openai.com/v1
+```
+
+运行流程：
+
+```bash
+npm run scan:futu:liquid
+npm run analyze:ai
+npm start
+```
+
+如果你使用 OpenAI-compatible 的其他模型服务，修改 `OPENAI_BASE_URL` 和 `OPENAI_MODEL` 即可。
+
+AI 会把结果写回：
+
+```text
+data/latest-report.json
+data/leap_watch.db
+```
+
+前端个股研究页会优先展示 `AI 基于富途真实数据的分析` 模块。
+
 ## 定时运行
 
 Windows 可以用任务计划程序每天美股收盘后运行：

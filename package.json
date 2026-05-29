@@ -9,6 +9,7 @@
     "scan:alpha": "node scripts/scan-alpha-vantage.mjs",
     "scan:futu": "python scripts/scan_futu.py",
     "scan:futu:liquid": "set FUTU_USE_DOLLAR_VOLUME_UNIVERSE=1&& set FUTU_MIN_STOCK_DOLLAR_VOLUME=1000000000&& python scripts/scan_futu.py",
+    "analyze:ai": "node scripts/ai-analyze.mjs",
     "check": "node --check app.js && node --check server.mjs && node --check scripts/scan.mjs && node --check scripts/scan-alpha-vantage.mjs"
   },
   "dependencies": {

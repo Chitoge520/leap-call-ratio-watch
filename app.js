@@ -714,8 +714,10 @@ function generateNote(record) {
   const valuation = inferValuation(record);
   const research = inferResearchProfile(record);
   const plan = buildStockTradePlan(record);
+  const ai = record.aiAnalysis;
 
   return `
+    ${ai ? renderAiAnalysis(record, ai) : ""}
     <div class="summary-grid">
       <article><span>主线判断</span><strong>${theme.label}</strong><small>${theme.score}/100</small></article>
       <article><span>流动性</span><strong>${liquidity.label}</strong><small>期权 ${compactNumber(liquidity.optionVolume)}</small></article>
@@ -758,6 +760,57 @@ function generateNote(record) {
     <h4>期权链原始数据</h4>
     ${renderOptionChain(record)}
   `;
+}
+
+function renderAiAnalysis(record, ai) {
+  const plan = ai.stockTradePlan || {};
+  const industry = ai.industryResearch || {};
+  const flow = ai.optionFlowRead || {};
+  return `
+    <section class="ai-panel">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">AI Research</p>
+          <h3>AI 基于富途真实数据的分析</h3>
+        </div>
+        <span>${record.ticker} · ${record.name || ""}</span>
+      </div>
+      <div class="summary-grid">
+        <article><span>主线判断</span><strong>${ai.marketMainline?.verdict || "-"}</strong><small>${ai.marketMainline?.confidence ?? "-"} / 100</small></article>
+        <article><span>流动性</span><strong>${ai.liquidity?.verdict || "-"}</strong><small>股票和期权合并判断</small></article>
+        <article><span>估值预期</span><strong>${ai.valuationExpectation?.verdict || "-"}</strong><small>不编造估值数字</small></article>
+        <article><span>研究深度</span><strong>${industry.level || "-"}</strong><small>产业链覆盖度</small></article>
+      </div>
+      <h4>AI 对期权资金流的解读</h4>
+      <p>${flow.summary || "暂无 AI 解读。"}</p>
+      ${renderList("异常证据", flow.abnormalEvidence)}
+      <h4>AI 产业链判断</h4>
+      ${renderList("上游", industry.upstream)}
+      ${renderList("下游", industry.downstream)}
+      ${renderList("竞争/对标", industry.competitors)}
+      ${renderList("关键问题", industry.keyQuestions)}
+      <h4>AI 股票交易计划</h4>
+      <p><strong>${plan.stance || "暂无明确态度"}</strong></p>
+      <div class="plan-grid">
+        <section><h5>买入股票条件</h5>${renderPlainList(plan.buyConditions)}</section>
+        <section><h5>加仓股票条件</h5>${renderPlainList(plan.addConditions)}</section>
+        <section><h5>卖出/降级条件</h5>${renderPlainList(plan.sellOrDowngradeConditions)}</section>
+      </div>
+      <p>${plan.invalidation || ""}</p>
+      ${renderList("风险", ai.risks)}
+      ${renderList("下一步研究", ai.nextResearchTasks)}
+    </section>
+  `;
+}
+
+function renderList(title, items) {
+  if (!Array.isArray(items) || !items.length) return "";
+  return `<h5>${title}</h5>${renderPlainList(items)}`;
+}
+
+function renderPlainList(items) {
+  if (!Array.isArray(items) || !items.length) return "<p>暂无</p>";
+  return `<ul>${items.map((item) => `<li>${item}</li>`).join("")}</ul>`;
 }
 
 function renderNote() {

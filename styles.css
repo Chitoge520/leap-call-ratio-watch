@@ -501,6 +501,25 @@ tbody tr:hover {
   margin-bottom: 0;
 }
 
+.ai-panel {
+  margin-bottom: 22px;
+  padding: 18px;
+  border: 1px solid #b9d5cb;
+  border-radius: 8px;
+  background: #f2faf6;
+}
+
+.ai-panel h3,
+.ai-panel h4,
+.ai-panel h5 {
+  margin-top: 0;
+}
+
+.ai-panel h5 {
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+
 .chain-toolbar {
   display: flex;
   justify-content: space-between;
