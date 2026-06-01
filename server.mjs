@@ -1,12 +1,18 @@
 import { createServer } from "node:http";
-import { createReadStream, existsSync } from "node:fs";
+import { createReadStream, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import sqlite3 from "sqlite3";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
+loadDotenv(path.join(root, ".env"));
 const port = Number(process.env.PORT || 4173);
 const dbPath = path.join(root, "data", "leap_watch.db");
+const jobStatusPath = path.join(root, "data", "job-status.json");
+const autoScanEnabled = process.env.AUTO_SCAN_ENABLED !== "0";
+const autoScanTimeEt = process.env.AUTO_SCAN_TIME_ET || "16:30";
+const jobState = loadJobState();
 
 const mime = {
   ".html": "text/html; charset=utf-8",
@@ -29,9 +35,15 @@ createServer(async (request, response) => {
   }
 }).listen(port, () => {
   console.log(`LEAP Watch is running at http://localhost:${port}`);
+  startScheduler();
 });
 
 async function handleApi(url, response) {
+  if (url.pathname === "/api/job/status") {
+    sendJson(response, 200, buildPublicJobState());
+    return;
+  }
+
   if (!existsSync(dbPath)) {
     sendJson(response, 404, { error: "Database not found. Run npm run scan:futu first." });
     return;
@@ -83,6 +95,73 @@ async function handleApi(url, response) {
     return;
   }
 
+  if (url.pathname === "/api/backtest/summary") {
+    const rows = await all(
+      `SELECT r.horizon_days, r.status, s.qualified_by_leap,
+              CASE WHEN s.cp_ratio >= 1 THEN 'call_dominant' ELSE 'put_dominant' END AS cp_group,
+              CASE WHEN s.score >= 75 THEN 'score_high'
+                   WHEN s.score >= 50 THEN 'score_mid'
+                   ELSE 'score_low' END AS score_group,
+              r.return_pct, r.max_drawdown_pct
+       FROM backtest_results r
+       JOIN backtest_signals s ON s.signal_id = r.signal_id`
+    );
+    sendJson(response, 200, summarizeBacktest(rows));
+    return;
+  }
+
+  if (url.pathname === "/api/backtest/signals") {
+    const ticker = String(url.searchParams.get("ticker") || "").toUpperCase();
+    const horizon = Number(url.searchParams.get("horizon") || 0);
+    const params = [];
+    const clauses = [];
+    if (ticker) {
+      clauses.push("s.ticker = ?");
+      params.push(ticker);
+    }
+    if (horizon) {
+      clauses.push("r.horizon_days = ?");
+      params.push(horizon);
+    }
+    const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+    const rows = await all(
+      `SELECT s.signal_id, s.report_date, s.generated_at, s.ticker, s.score, s.option_volume,
+              s.leap_ratio, s.cp_ratio, s.premium_flow, s.qualified_by_leap, s.raw_json,
+              r.horizon_days, r.entry_date, r.entry_close, r.exit_date, r.exit_close,
+              r.return_pct, r.max_drawdown_pct, r.status
+       FROM backtest_signals s
+       LEFT JOIN backtest_results r ON r.signal_id = s.signal_id
+       ${where}
+       ORDER BY s.report_date DESC, s.score DESC, r.horizon_days ASC
+       LIMIT 500`,
+      params
+    );
+    sendJson(response, 200, { signals: rows.map(normalizeBacktestRow) });
+    return;
+  }
+
+  if (url.pathname === "/api/backtest/ticker") {
+    const ticker = String(url.searchParams.get("ticker") || "").toUpperCase();
+    if (!ticker) {
+      sendJson(response, 400, { error: "ticker is required" });
+      return;
+    }
+    const rows = await all(
+      `SELECT s.signal_id, s.report_date, s.generated_at, s.ticker, s.score, s.option_volume,
+              s.leap_ratio, s.cp_ratio, s.premium_flow, s.qualified_by_leap, s.raw_json,
+              r.horizon_days, r.entry_date, r.entry_close, r.exit_date, r.exit_close,
+              r.return_pct, r.max_drawdown_pct, r.status
+       FROM backtest_signals s
+       LEFT JOIN backtest_results r ON r.signal_id = s.signal_id
+       WHERE s.ticker = ?
+       ORDER BY s.report_date DESC, r.horizon_days ASC
+       LIMIT 240`,
+      [ticker]
+    );
+    sendJson(response, 200, { ticker, signals: rows.map(normalizeBacktestRow) });
+    return;
+  }
+
   sendJson(response, 404, { error: "Unknown API endpoint" });
 }
 
@@ -127,4 +206,274 @@ function get(sql, params = []) {
       else resolve(row);
     });
   });
+}
+
+function summarizeBacktest(rows) {
+  const groups = new Map();
+  for (const row of rows) {
+    addSummaryGroup(groups, row.horizon_days, "all", row);
+    addSummaryGroup(groups, row.horizon_days, row.qualified_by_leap ? "leap_qualified" : "leap_unqualified", row);
+    addSummaryGroup(groups, row.horizon_days, row.cp_group, row);
+    addSummaryGroup(groups, row.horizon_days, row.score_group, row);
+  }
+  return { summary: Array.from(groups.values()).map(finalizeSummaryGroup) };
+}
+
+function addSummaryGroup(groups, horizon, group, row) {
+  const key = `${horizon}:${group}`;
+  if (!groups.has(key)) {
+    groups.set(key, {
+      horizonDays: horizon,
+      group,
+      totalSamples: 0,
+      completedSamples: 0,
+      pendingSamples: 0,
+      wins: 0,
+      returns: [],
+      drawdowns: []
+    });
+  }
+  const item = groups.get(key);
+  item.totalSamples += 1;
+  if (row.status === "complete" && Number.isFinite(Number(row.return_pct))) {
+    const returnPct = Number(row.return_pct);
+    item.completedSamples += 1;
+    item.wins += returnPct > 0 ? 1 : 0;
+    item.returns.push(returnPct);
+    if (Number.isFinite(Number(row.max_drawdown_pct))) item.drawdowns.push(Number(row.max_drawdown_pct));
+  } else {
+    item.pendingSamples += 1;
+  }
+}
+
+function finalizeSummaryGroup(item) {
+  const returns = item.returns.slice().sort((a, b) => a - b);
+  const completed = item.completedSamples || 0;
+  return {
+    horizonDays: item.horizonDays,
+    group: item.group,
+    totalSamples: item.totalSamples,
+    completedSamples: completed,
+    pendingSamples: item.pendingSamples,
+    winRate: completed ? item.wins / completed : null,
+    averageReturnPct: completed ? average(returns) : null,
+    medianReturnPct: completed ? median(returns) : null,
+    maxDrawdownPct: item.drawdowns.length ? Math.min(...item.drawdowns) : null
+  };
+}
+
+function normalizeBacktestRow(row) {
+  let raw = {};
+  try {
+    raw = JSON.parse(row.raw_json || "{}");
+  } catch {
+    raw = {};
+  }
+  return {
+    signal_id: row.signal_id,
+    report_date: row.report_date,
+    generated_at: row.generated_at,
+    ticker: row.ticker,
+    score: row.score,
+    option_volume: row.option_volume,
+    leap_ratio: row.leap_ratio,
+    cp_ratio: row.cp_ratio,
+    premium_flow: row.premium_flow,
+    qualified_by_leap: Boolean(row.qualified_by_leap),
+    horizon_days: row.horizon_days,
+    entry_date: row.entry_date,
+    entry_close: row.entry_close,
+    exit_date: row.exit_date,
+    exit_close: row.exit_close,
+    return_pct: row.return_pct,
+    max_drawdown_pct: row.max_drawdown_pct,
+    status: row.status,
+    sourceTopOptionContracts: raw.sourceTopOptionContracts || []
+  };
+}
+
+function average(items) {
+  return items.reduce((sum, item) => sum + item, 0) / Math.max(items.length, 1);
+}
+
+function median(items) {
+  const mid = Math.floor(items.length / 2);
+  return items.length % 2 ? items[mid] : (items[mid - 1] + items[mid]) / 2;
+}
+
+function startScheduler() {
+  mkdirSync(path.join(root, "data"), { recursive: true });
+  updateNextRun();
+  persistJobState();
+  if (!autoScanEnabled) return;
+  setTimeout(checkScheduler, 2500);
+  setInterval(checkScheduler, 60_000);
+}
+
+async function checkScheduler() {
+  if (jobState.running || !autoScanEnabled) return;
+  const et = getEtParts();
+  const nowMinutes = Number(et.hour) * 60 + Number(et.minute);
+  const targetMinutes = parseTimeToMinutes(autoScanTimeEt);
+  if (nowMinutes < targetMinutes || jobState.lastRunDateEt === et.date) return;
+
+  jobState.running = true;
+  jobState.lastAttemptAt = new Date().toISOString();
+  jobState.lastAttemptDateEt = et.date;
+  jobState.lastStatus = "checking";
+  jobState.error = "";
+  persistJobState();
+
+  try {
+    const health = await runJson("python", ["scripts/futu_healthcheck.py", "--trading-day", et.date]);
+    jobState.openD = health;
+    if (!health.connected) {
+      jobState.lastStatus = "disconnected";
+      jobState.error = health.error || "Futu OpenD disconnected";
+      return;
+    }
+    if (!health.isTradingDay) {
+      jobState.lastStatus = "skipped_non_trading_day";
+      jobState.lastRunDateEt = et.date;
+      return;
+    }
+    jobState.lastStatus = "running";
+    persistJobState();
+    await runProcess("node", ["scripts/daily-futu-pipeline.mjs"]);
+    jobState.lastStatus = "success";
+    jobState.lastRunAt = new Date().toISOString();
+    jobState.lastRunDateEt = et.date;
+  } catch (error) {
+    jobState.lastStatus = "error";
+    jobState.error = error.message;
+  } finally {
+    jobState.running = false;
+    updateNextRun();
+    persistJobState();
+  }
+}
+
+function buildPublicJobState() {
+  updateNextRun();
+  return {
+    enabled: autoScanEnabled,
+    scheduleTimeEt: autoScanTimeEt,
+    ...jobState
+  };
+}
+
+function updateNextRun() {
+  const et = getEtParts();
+  const targetMinutes = parseTimeToMinutes(autoScanTimeEt);
+  const nowMinutes = Number(et.hour) * 60 + Number(et.minute);
+  let nextDate = et.date;
+  if (nowMinutes >= targetMinutes || jobState.lastRunDateEt === et.date) {
+    nextDate = addDaysIso(et.date, 1);
+  }
+  jobState.nextRunEt = `${nextDate} ${autoScanTimeEt}`;
+}
+
+function runJson(command, args) {
+  return runProcess(command, args).then((text) => {
+    const line = text.trim().split(/\r?\n/).pop() || "{}";
+    return JSON.parse(line);
+  });
+}
+
+function runProcess(command, args) {
+  return new Promise((resolve, reject) => {
+    const env = buildChildEnv();
+    const child = spawn(command, args, { cwd: root, env, shell: process.platform === "win32" });
+    let output = "";
+    child.stdout.on("data", (chunk) => {
+      output += chunk;
+      process.stdout.write(chunk);
+    });
+    child.stderr.on("data", (chunk) => {
+      output += chunk;
+      process.stderr.write(chunk);
+    });
+    child.on("error", reject);
+    child.on("exit", (code) => {
+      if (code === 0) resolve(output);
+      else reject(new Error(`${command} ${args.join(" ")} exited with ${code}: ${output.slice(-1000)}`));
+    });
+  });
+}
+
+function buildChildEnv() {
+  const userPath = process.env.Path || process.env.PATH || "";
+  const env = {
+    ...process.env,
+    AUTO_SCAN_ENABLED: process.env.AUTO_SCAN_ENABLED || "1",
+    FUTU_USE_OPTION_VOLUME_UNIVERSE: process.env.FUTU_USE_OPTION_VOLUME_UNIVERSE || "1",
+    FUTU_OPTION_SCREEN_CONTRACTS: process.env.FUTU_OPTION_SCREEN_CONTRACTS || "500",
+    FUTU_MAX_SYMBOLS: process.env.FUTU_MAX_SYMBOLS || "5",
+    APPDATA: process.env.APPDATA || path.join(root, ".futu-appdata"),
+    Path: userPath
+  };
+  return env;
+}
+
+function loadJobState() {
+  try {
+    if (existsSync(jobStatusPath)) return JSON.parse(readFileSync(jobStatusPath, "utf8"));
+  } catch {
+    // Ignore corrupt status; it will be rewritten on next scheduler tick.
+  }
+  return {
+    running: false,
+    lastStatus: "idle",
+    lastRunAt: "",
+    lastRunDateEt: "",
+    lastAttemptAt: "",
+    lastAttemptDateEt: "",
+    nextRunEt: "",
+    error: "",
+    openD: { connected: false, isTradingDay: false }
+  };
+}
+
+function persistJobState() {
+  mkdirSync(path.dirname(jobStatusPath), { recursive: true });
+  writeFileSync(jobStatusPath, JSON.stringify(jobState, null, 2), "utf8");
+}
+
+function getEtParts() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return {
+    date: `${values.year}-${values.month}-${values.day}`,
+    hour: values.hour,
+    minute: values.minute
+  };
+}
+
+function parseTimeToMinutes(value) {
+  const [hour, minute] = String(value).split(":").map((item) => Number(item));
+  return hour * 60 + minute;
+}
+
+function addDaysIso(isoDate, days) {
+  const date = new Date(`${isoDate}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function loadDotenv(filePath) {
+  if (!existsSync(filePath)) return;
+  for (const line of readFileSync(filePath, "utf8").split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#") || !trimmed.includes("=")) continue;
+    const [key, ...rest] = trimmed.split("=");
+    process.env[key.trim()] ??= rest.join("=").trim().replace(/^['"]|['"]$/g, "");
+  }
 }

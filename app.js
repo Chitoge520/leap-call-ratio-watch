@@ -142,7 +142,14 @@ const els = {
   jsonBox: document.querySelector("#jsonBox"),
   jsonOutput: document.querySelector("#jsonOutput"),
   importJson: document.querySelector("#importJson"),
-  exportJson: document.querySelector("#exportJson")
+  exportJson: document.querySelector("#exportJson"),
+  jobStatusText: document.querySelector("#jobStatusText"),
+  jobStatusGrid: document.querySelector("#jobStatusGrid"),
+  refreshBacktest: document.querySelector("#refreshBacktest"),
+  backtestSummaryRows: document.querySelector("#backtestSummaryRows"),
+  backtestSignalRows: document.querySelector("#backtestSignalRows"),
+  backtestTicker: document.querySelector("#backtestTicker"),
+  backtestHorizon: document.querySelector("#backtestHorizon")
 };
 
 function loadRecords() {
@@ -245,6 +252,87 @@ async function renderTickerHistory() {
   }
 }
 
+async function renderJobStatus() {
+  if (!els.jobStatusGrid) return;
+  try {
+    const response = await fetch("/api/job/status", { cache: "no-store" });
+    if (!response.ok) throw new Error((await response.json()).error || "job status failed");
+    const status = await response.json();
+    els.jobStatusText.textContent = status.running ? "running" : status.lastStatus || "idle";
+    const openD = status.openD || {};
+    els.jobStatusGrid.innerHTML = [
+      ["Enabled", status.enabled ? "yes" : "no"],
+      ["OpenD", openD.connected ? "connected" : "disconnected"],
+      ["Trading day", openD.isTradingDay ? "yes" : "no"],
+      ["Last run", status.lastRunAt ? status.lastRunAt.slice(0, 19).replace("T", " ") : "-"],
+      ["Next ET", status.nextRunEt || "-"],
+      ["Error", status.error || "-"]
+    ].map(([label, value]) => `<article><span>${label}</span><strong>${value}</strong></article>`).join("");
+  } catch (error) {
+    els.jobStatusText.textContent = "unavailable";
+    els.jobStatusGrid.innerHTML = `<article><span>Error</span><strong>${error.message}</strong></article>`;
+  }
+}
+
+async function renderBacktest() {
+  await Promise.all([renderBacktestSummary(), renderBacktestSignals()]);
+}
+
+async function renderBacktestSummary() {
+  if (!els.backtestSummaryRows) return;
+  try {
+    const response = await fetch("/api/backtest/summary", { cache: "no-store" });
+    if (!response.ok) throw new Error((await response.json()).error || "backtest summary failed");
+    const payload = await response.json();
+    const rows = (payload.summary || []).sort((a, b) => a.horizonDays - b.horizonDays || String(a.group).localeCompare(String(b.group)));
+    els.backtestSummaryRows.innerHTML = rows.length
+      ? rows.map((row) => `
+        <tr>
+          <td>${row.horizonDays}D</td>
+          <td>${formatGroup(row.group)}</td>
+          <td>${row.completedSamples} / ${row.totalSamples}</td>
+          <td>${formatPct(row.winRate, 1, true)}</td>
+          <td>${formatPct(row.averageReturnPct)}</td>
+          <td>${formatPct(row.medianReturnPct)}</td>
+          <td>${formatPct(row.maxDrawdownPct)}</td>
+        </tr>
+      `).join("")
+      : `<tr><td colspan="7">No completed backtest data yet. New Top5 signals start as pending until enough trading days pass.</td></tr>`;
+  } catch (error) {
+    els.backtestSummaryRows.innerHTML = `<tr><td colspan="7">${error.message}</td></tr>`;
+  }
+}
+
+async function renderBacktestSignals() {
+  if (!els.backtestSignalRows) return;
+  const params = new URLSearchParams();
+  const ticker = els.backtestTicker?.value.trim().toUpperCase();
+  const horizon = els.backtestHorizon?.value;
+  if (ticker) params.set("ticker", ticker);
+  if (horizon) params.set("horizon", horizon);
+  try {
+    const response = await fetch(`/api/backtest/signals?${params.toString()}`, { cache: "no-store" });
+    if (!response.ok) throw new Error((await response.json()).error || "backtest signals failed");
+    const payload = await response.json();
+    els.backtestSignalRows.innerHTML = (payload.signals || []).length
+      ? payload.signals.map((row) => `
+        <tr>
+          <td>${row.report_date || "-"}</td>
+          <td><strong>${row.ticker}</strong><div class="small">${row.qualified_by_leap ? "LEAP qualified" : "LEAP unqualified"}</div></td>
+          <td>${row.horizon_days ? `${row.horizon_days}D` : "-"}</td>
+          <td>${row.entry_date || "-"}<div class="small">${formatPrice(row.entry_close)}</div></td>
+          <td>${row.exit_date || row.status || "-"}<div class="small">${formatPrice(row.exit_close)}</div></td>
+          <td>${row.status === "complete" ? formatPct(row.return_pct) : "pending"}</td>
+          <td>${number(row.score).toFixed(0)}<div class="small">Opt vol ${compactNumber(row.option_volume)}</div></td>
+          <td>${formatContracts(row.sourceTopOptionContracts)}</td>
+        </tr>
+      `).join("")
+      : `<tr><td colspan="8">No signal rows found.</td></tr>`;
+  } catch (error) {
+    els.backtestSignalRows.innerHTML = `<tr><td colspan="8">${error.message}</td></tr>`;
+  }
+}
+
 function normalizeRecord(record) {
   const ticker = String(record.ticker || "").toUpperCase();
   const normalized = {
@@ -310,6 +398,41 @@ function compactNumber(value) {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
   return String(Math.round(n));
+}
+
+function formatPct(value, digits = 2, ratio = false) {
+  if (value === null || value === undefined || value === "") return "-";
+  const n = number(value, NaN);
+  if (!Number.isFinite(n)) return "-";
+  return `${(ratio ? n * 100 : n).toFixed(digits)}%`;
+}
+
+function formatPrice(value) {
+  const n = number(value, NaN);
+  return Number.isFinite(n) ? n.toFixed(2) : "-";
+}
+
+function formatGroup(group) {
+  const labels = {
+    all: "All Top5",
+    leap_qualified: "LEAP qualified",
+    leap_unqualified: "LEAP unqualified",
+    call_dominant: "Call dominant",
+    put_dominant: "Put dominant",
+    score_high: "Score high",
+    score_mid: "Score mid",
+    score_low: "Score low"
+  };
+  return labels[group] || group || "-";
+}
+
+function formatContracts(contracts) {
+  if (!Array.isArray(contracts) || !contracts.length) return "-";
+  return contracts.slice(0, 3).map((item) => {
+    const name = item.code || item.name || "-";
+    const volume = compactNumber(item.volume);
+    return `<div><strong>${name}</strong><span class="small"> ${item.type || ""} vol ${volume}</span></div>`;
+  }).join("");
 }
 
 function callShare(record) {
@@ -443,12 +566,13 @@ function buildTradePlan(record) {
 
 function renderOptionChain(record) {
   const rows = Array.isArray(record.optionChain) ? record.optionChain : [];
+  const expirations = Array.isArray(record.optionChainExpirations) ? record.optionChainExpirations : [];
   if (!rows.length) {
     return `<p>当前报告没有包含期权链原始数据。请重新运行 <code>npm run scan:futu</code> 生成包含 optionChain 的报告。</p>`;
   }
   return `
     <div class="chain-toolbar">
-      <span>共保留 ${rows.length} 条记录，优先展示 LEAP 和高成交合约</span>
+      <span>共保留 ${rows.length} 条记录，覆盖 ${expirations.length || "-"} 个到期日${expirations.length ? `：${expirations.slice(0, 6).join(" / ")}${expirations.length > 6 ? " ..." : ""}` : ""}</span>
     </div>
     <div class="chain-table-wrap">
       <table class="chain-table">
@@ -530,7 +654,7 @@ function renderDashboard() {
           <td><span class="score">${score}</span></td>
           <td>${number(record.cpRatio).toFixed(2)}</td>
           <td>${number(record.leapRatio).toFixed(2)}</td>
-          <td><strong>${record.hotContract || "-"}</strong><div class="small">权利金 ${compactNumber(record.premiumFlow)}</div></td>
+          <td><strong>${record.hotContract || "-"}</strong><div class="small">权利金 ${compactNumber(record.premiumFlow)}</div><div class="small">来源期权量 ${compactNumber(record.stockOptionVolume || record.totalVolume)}</div></td>
           <td>${(share * 100).toFixed(1)}%<div class="small">${compactNumber(record.callVolume)} / ${compactNumber(record.totalVolume)}</div></td>
           <td><span class="tag ${theme.label === "是" ? "good" : theme.label === "否" ? "bad" : "warn"}">${theme.label}</span><div class="small">${record.theme || "-"}</div></td>
           <td><span class="tag ${liquidity.label === "充足" ? "good" : liquidity.label === "不足" ? "bad" : "warn"}">${liquidity.label}</span><div class="small">成交额 ${compactNumber(liquidity.stockDollarVolume || 0)}</div></td>
@@ -826,6 +950,7 @@ function renderAll() {
   renderDashboard();
   renderTickerList();
   renderNote();
+  renderJobStatus();
 }
 
 function switchView(view) {
@@ -838,12 +963,14 @@ function switchView(view) {
   const titleMap = {
     dashboard: "异常榜",
     research: "研究报告",
+    backtest: "Backtest",
     history: "历史查询",
     pipeline: "数据录入",
     framework: "监控框架"
   };
   els.pageTitle.textContent = titleMap[view];
   if (view === "history") renderHistoryReports();
+  if (view === "backtest") renderBacktest();
 }
 
 function readForm(form) {
@@ -904,6 +1031,9 @@ els.loadAutoReport.addEventListener("click", () => {
 });
 
 els.refreshHistory?.addEventListener("click", renderHistoryReports);
+els.refreshBacktest?.addEventListener("click", renderBacktest);
+els.backtestTicker?.addEventListener("input", renderBacktestSignals);
+els.backtestHorizon?.addEventListener("change", renderBacktestSignals);
 els.loadTickerHistory?.addEventListener("click", renderTickerHistory);
 els.historyTicker?.addEventListener("keydown", (event) => {
   if (event.key === "Enter") renderTickerHistory();
@@ -943,3 +1073,4 @@ els.importJson.addEventListener("click", () => {
 
 renderAll();
 loadGeneratedReport({ silent: true });
+setInterval(renderJobStatus, 60_000);

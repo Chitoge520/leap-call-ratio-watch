@@ -7,7 +7,17 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 try:
-    from futu import Market, OpenQuoteContext, OptionType, RET_OK, SecurityType, SubType
+    from futu import (
+        Market,
+        OpenQuoteContext,
+        OptIndicator,
+        OptMarketCategory,
+        OptionScreenRequest,
+        OptionType,
+        RET_OK,
+        SecurityType,
+        SubType,
+    )
 except ImportError as exc:
     raise SystemExit(
         "Missing futu-api. Install it with: pip install -r requirements-futu.txt"
@@ -21,6 +31,46 @@ REPORTS_DIR = ROOT / "reports"
 DB_PATH = DATA_DIR / "leap_watch.db"
 LAST_CHAIN_CALL_TS = 0
 STOCK_META = {}
+DEFAULT_NON_SINGLE_STOCK_SYMBOLS = {
+    "SPY",
+    "QQQ",
+    "IWM",
+    "DIA",
+    "VTI",
+    "VOO",
+    "IVV",
+    "RSP",
+    "TQQQ",
+    "SQQQ",
+    "SOXL",
+    "SOXS",
+    "SPX",
+    "SPXW",
+    "XSP",
+    "NDX",
+    "RUT",
+    "VIX",
+    "XLF",
+    "XLE",
+    "XLK",
+    "XLV",
+    "XLY",
+    "XLI",
+    "XLP",
+    "XLU",
+    "XLC",
+    "XLB",
+    "XLRE",
+    "SMH",
+    "SOXX",
+    "ARKK",
+    "HYG",
+    "TLT",
+    "GLD",
+    "SLV",
+    "USO",
+    "UNG",
+}
 
 
 def main():
@@ -28,8 +78,13 @@ def main():
     config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     host = os.getenv("FUTU_OPEND_HOST", "127.0.0.1")
     port = int(os.getenv("FUTU_OPEND_PORT", "11111"))
-    use_dollar_volume_universe = os.getenv("FUTU_USE_DOLLAR_VOLUME_UNIVERSE", "0") == "1"
-    default_max_symbols = 9999 if use_dollar_volume_universe else config.get("maxSymbolsPerRun", len(config["symbols"]))
+    use_market_universe = (
+        os.getenv("FUTU_USE_DOLLAR_VOLUME_UNIVERSE", "0") == "1"
+        or os.getenv("FUTU_USE_VOLUME_UNIVERSE", "0") == "1"
+    )
+    use_option_volume_universe = os.getenv("FUTU_USE_OPTION_VOLUME_UNIVERSE", "0") == "1"
+    universe_sort_field = os.getenv("FUTU_UNIVERSE_SORT_FIELD", "turnover").lower()
+    default_max_symbols = 9999 if use_market_universe or use_option_volume_universe else config.get("maxSymbolsPerRun", len(config["symbols"]))
     max_symbols = int(os.getenv("FUTU_MAX_SYMBOLS", default_max_symbols))
     leap_days = int(config.get("leapDays", 180))
 
@@ -41,7 +96,9 @@ def main():
     errors = []
 
     try:
-        if use_dollar_volume_universe:
+        if use_option_volume_universe:
+            symbols = build_option_volume_universe(quote_ctx, max_symbols)
+        elif use_market_universe:
             symbols = build_dollar_volume_universe(quote_ctx, max_symbols)
         else:
             symbols = config["symbols"][:max_symbols]
@@ -51,11 +108,16 @@ def main():
             try:
                 rows = fetch_symbol_options(quote_ctx, futu_code, leap_days)
                 record = analyze_symbol(symbol, rows, leap_days)
-                if record and record["totalVolume"] >= config.get("minTotalOptionVolume", 0):
-                    if record["leapCallVolume"] >= config.get("minLeapCallVolume", 0):
+                if record:
+                    apply_thresholds(record, config)
+                    if use_option_volume_universe or record["qualifiedByLeapThreshold"]:
                         records.append(record)
                 time.sleep(0.8)
             except Exception as exc:
+                if use_option_volume_universe and symbol in STOCK_META:
+                    record = build_source_only_record(symbol, leap_days, str(exc))
+                    apply_thresholds(record, config)
+                    records.append(record)
                 errors.append({"symbol": symbol, "error": str(exc)})
     finally:
         quote_ctx.close()
@@ -69,10 +131,17 @@ def main():
             "leapDays": leap_days,
             "minTotalOptionVolume": config.get("minTotalOptionVolume", 0),
             "minLeapCallVolume": config.get("minLeapCallVolume", 0),
+            "universe": "us_option_volume" if use_option_volume_universe else "us_market" if use_market_universe else "watchlist",
+            "universeSortField": universe_sort_field if use_market_universe else "",
+            "optionScreenContractCount": int(os.getenv("FUTU_OPTION_SCREEN_CONTRACTS", "500")) if use_option_volume_universe else 0,
+            "maxExpirations": option_chain_expiration_limit(use_option_volume_universe),
+            "minExpirationsForOptionVolumeScan": min_option_volume_expirations() if use_option_volume_universe else 0,
+            "leapExpirationsForOptionVolumeScan": leap_option_volume_expirations() if use_option_volume_universe else 0,
         },
         "summary": {
             "scannedSymbols": len(symbols),
             "qualifiedSymbols": len(records),
+            "leapQualifiedSymbols": sum(1 for item in records if item.get("qualifiedByLeapThreshold")),
             "errors": len(errors),
         },
         "records": records,
@@ -144,6 +213,26 @@ def save_report_to_db(report):
                     record.get("stockDollarVolume", 0),
                     record.get("hotContract", ""),
                     record.get("flowType", ""),
+                    json.dumps(record, ensure_ascii=False),
+                ),
+            )
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO backtest_signals
+                (report_date, generated_at, ticker, score, option_volume, leap_ratio, cp_ratio,
+                 premium_flow, qualified_by_leap, raw_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    report_date,
+                    generated_at,
+                    record.get("ticker", ""),
+                    record.get("score", 0),
+                    record.get("stockOptionVolume") or record.get("totalVolume", 0),
+                    record.get("leapRatio", 0),
+                    record.get("cpRatio", 0),
+                    record.get("premiumFlow", 0),
+                    1 if record.get("qualifiedByLeapThreshold") else 0,
                     json.dumps(record, ensure_ascii=False),
                 ),
             )
@@ -279,8 +368,117 @@ def init_db(conn):
         );
         CREATE INDEX IF NOT EXISTS idx_option_chain_ticker_date ON option_chain_rows(ticker, report_date DESC);
         CREATE INDEX IF NOT EXISTS idx_option_chain_date_volume ON option_chain_rows(report_date DESC, volume DESC);
+
+        CREATE TABLE IF NOT EXISTS stock_price_bars (
+            ticker TEXT NOT NULL,
+            trade_date TEXT NOT NULL,
+            open REAL,
+            close REAL,
+            high REAL,
+            low REAL,
+            volume REAL,
+            turnover REAL,
+            PRIMARY KEY (ticker, trade_date)
+        );
+        CREATE INDEX IF NOT EXISTS idx_stock_price_bars_ticker_date ON stock_price_bars(ticker, trade_date);
+
+        CREATE TABLE IF NOT EXISTS backtest_signals (
+            signal_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            report_date TEXT NOT NULL,
+            generated_at TEXT NOT NULL,
+            ticker TEXT NOT NULL,
+            score REAL,
+            option_volume REAL,
+            leap_ratio REAL,
+            cp_ratio REAL,
+            premium_flow REAL,
+            qualified_by_leap INTEGER,
+            raw_json TEXT NOT NULL,
+            UNIQUE(generated_at, ticker)
+        );
+        CREATE INDEX IF NOT EXISTS idx_backtest_signals_date ON backtest_signals(report_date DESC);
+        CREATE INDEX IF NOT EXISTS idx_backtest_signals_ticker ON backtest_signals(ticker, report_date DESC);
+
+        CREATE TABLE IF NOT EXISTS backtest_results (
+            signal_id INTEGER NOT NULL,
+            horizon_days INTEGER NOT NULL,
+            entry_date TEXT,
+            entry_close REAL,
+            exit_date TEXT,
+            exit_close REAL,
+            return_pct REAL,
+            max_drawdown_pct REAL,
+            status TEXT NOT NULL,
+            PRIMARY KEY (signal_id, horizon_days),
+            FOREIGN KEY (signal_id) REFERENCES backtest_signals(signal_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_backtest_results_horizon ON backtest_results(horizon_days, status);
         """
     )
+
+
+def apply_thresholds(record, config):
+    min_total = config.get("minTotalOptionVolume", 0)
+    min_leap = config.get("minLeapCallVolume", 0)
+    total_ok = record.get("totalVolume", 0) >= min_total
+    leap_ok = record.get("leapCallVolume", 0) >= min_leap
+    record["qualifiedByLeapThreshold"] = bool(total_ok and leap_ok)
+    record["leapThresholdReason"] = (
+        "pass"
+        if total_ok and leap_ok
+        else f"below threshold: totalVolume>={min_total} is {total_ok}, leapCallVolume>={min_leap} is {leap_ok}"
+    )
+    return record
+
+
+def build_source_only_record(symbol, leap_days, error):
+    today = datetime.now().date()
+    meta = STOCK_META.get(symbol, {})
+    source_top_contracts = meta.get("topOptionContracts", [])
+    stock_option_volume = meta.get("stockOptionVolume", 0)
+    option_chain_expirations = meta.get("optionChainExpirations", [])
+    call_volume = sum(number(item.get("volume")) for item in source_top_contracts if item.get("type") == "call")
+    put_volume = sum(number(item.get("volume")) for item in source_top_contracts if item.get("type") == "put")
+    total_volume = call_volume + put_volume or stock_option_volume
+    cp_ratio = call_volume / max(put_volume, 1)
+    return {
+        "ticker": symbol,
+        "name": meta.get("name") or symbol,
+        "theme": infer_theme(symbol),
+        "date": today.isoformat(),
+        "cpRatio": cp_ratio,
+        "leapRatio": 0,
+        "leapCpRatio": 0,
+        "totalVolume": total_volume,
+        "callVolume": call_volume,
+        "putVolume": put_volume,
+        "leapCallVolume": 0,
+        "leapPutVolume": 0,
+        "leapCallOi": 0,
+        "totalCallOi": 0,
+        "hotContract": source_top_contracts[0].get("code", "") if source_top_contracts else "",
+        "hotContractVolume": source_top_contracts[0].get("volume", 0) if source_top_contracts else 0,
+        "hotContractOi": source_top_contracts[0].get("openInterest", 0) if source_top_contracts else 0,
+        "hotContractPremium": 0,
+        "premiumFlow": 0,
+        "stockDollarVolume": meta.get("stockDollarVolume", 0),
+        "stockVolume": meta.get("stockVolume", 0),
+        "stockOptionVolume": stock_option_volume,
+        "stockOptionTurnover": meta.get("stockOptionTurnover", 0),
+        "sourceTopOptionContracts": source_top_contracts,
+        "optionChainExpirations": option_chain_expirations,
+        "optionChainExpirationCount": len(option_chain_expirations),
+        "streak": 1,
+        "oiTrend": "unknown",
+        "catalyst": "",
+        "risk": f"Full option chain fetch failed; source contracts are from get_option_screen. Error: {error}",
+        "score": score_record(0, cp_ratio, call_volume / max(total_volume, 1), 0, 0, 0),
+        "flowType": "Source option-volume Top5",
+        "note": f"{symbol} is included because it ranked in the option-volume screen. Full chain fetch failed, so LEAP ratios are unknown.",
+        "optionChain": [],
+        "dataStatus": "source_only",
+        "missingData": ["fullOptionChain", "leapRatio", "premiumFlow"],
+    }
 
 
 def fetch_symbol_options(quote_ctx, futu_code, leap_days):
@@ -290,8 +488,11 @@ def fetch_symbol_options(quote_ctx, futu_code, leap_days):
     frames = []
     expirations = fetch_expiration_dates(quote_ctx, futu_code, today, horizon)
 
-    max_expirations = int(os.getenv("FUTU_MAX_EXPIRATIONS", len(expirations)))
-    for expiration in expirations[:max_expirations]:
+    selected_expirations = select_option_chain_expirations(expirations, today, leap_days, is_option_volume_scan())
+    symbol = code_to_symbol(futu_code)
+    if symbol:
+        STOCK_META.setdefault(symbol, {})["optionChainExpirations"] = [item.isoformat() for item in selected_expirations]
+    for expiration in selected_expirations:
         throttle_chain_request()
         ret, chain = quote_ctx.get_option_chain(
             code=futu_code,
@@ -325,8 +526,41 @@ def fetch_symbol_options(quote_ctx, futu_code, leap_days):
     return rows
 
 
+def is_option_volume_scan():
+    return os.getenv("FUTU_USE_OPTION_VOLUME_UNIVERSE", "0") == "1"
+
+
+def option_chain_expiration_limit(use_option_volume_universe=False):
+    requested = int(os.getenv("FUTU_MAX_EXPIRATIONS", "9999"))
+    if use_option_volume_universe:
+        requested = max(requested, min_option_volume_expirations())
+    return requested
+
+
+def min_option_volume_expirations():
+    return int(os.getenv("FUTU_MIN_EXPIRATIONS_OPTION_VOLUME", "12"))
+
+
+def leap_option_volume_expirations():
+    return int(os.getenv("FUTU_LEAP_EXPIRATIONS_OPTION_VOLUME", "8"))
+
+
+def select_option_chain_expirations(expirations, today, leap_days, use_option_volume_universe=False):
+    if not use_option_volume_universe:
+        return expirations[: min(option_chain_expiration_limit(False), len(expirations))]
+    near_count = min(option_chain_expiration_limit(True), len(expirations))
+    selected = list(expirations[:near_count])
+    leap_cutoff = today + timedelta(days=leap_days)
+    leap_expirations = [item for item in expirations if item >= leap_cutoff][:leap_option_volume_expirations()]
+    return sorted(set(selected + leap_expirations))
+
+
 def build_dollar_volume_universe(quote_ctx, max_symbols):
     min_turnover = float(os.getenv("FUTU_MIN_STOCK_DOLLAR_VOLUME", "1000000000"))
+    min_volume = float(os.getenv("FUTU_MIN_STOCK_VOLUME", "0"))
+    sort_field = os.getenv("FUTU_UNIVERSE_SORT_FIELD", "turnover").lower()
+    if sort_field not in {"turnover", "volume"}:
+        sort_field = "turnover"
     sample_limit = int(os.getenv("FUTU_UNIVERSE_SAMPLE_LIMIT", "0"))
     batch_size = int(os.getenv("FUTU_SNAPSHOT_BATCH_SIZE", "300"))
 
@@ -359,20 +593,137 @@ def build_dollar_volume_universe(quote_ctx, max_symbols):
             continue
         for row in frame_to_records(snapshot):
             turnover = number(row.get("turnover"))
+            volume = number(row.get("volume"))
             code = row.get("code", "")
             symbol = code_to_symbol(code)
-            if symbol and turnover >= min_turnover:
+            is_liquid_enough = volume >= min_volume if sort_field == "volume" else turnover >= min_turnover
+            if symbol and is_liquid_enough:
                 STOCK_META[symbol] = {
                     "name": row.get("name") or infer_name(symbol),
                     "stockDollarVolume": turnover,
                     "lastPrice": number(row.get("last_price")),
-                    "stockVolume": number(row.get("volume")),
+                    "stockVolume": volume,
                 }
-                liquid.append({"symbol": symbol, "turnover": turnover})
+                liquid.append({"symbol": symbol, "turnover": turnover, "volume": volume})
         time.sleep(0.25)
 
-    liquid.sort(key=lambda item: item["turnover"], reverse=True)
+    liquid.sort(key=lambda item: item[sort_field], reverse=True)
     return [item["symbol"] for item in liquid[:max_symbols]]
+
+
+def build_option_volume_universe(quote_ctx, max_symbols):
+    page_count = int(os.getenv("FUTU_OPTION_SCREEN_CONTRACTS", "500"))
+    page_count = max(max_symbols, min(page_count, 2000))
+    req = OptionScreenRequest(market_categories=[OptMarketCategory.US_STOCK])
+    req.add_sort(OptIndicator.VOLUME, desc=True)
+    req.page_count = page_count
+    for field in (
+        OptIndicator.VOLUME,
+        OptIndicator.TURNOVER,
+        OptIndicator.OPEN_INTEREST,
+        OptIndicator.PRICE,
+        OptIndicator.BID_PRICE,
+        OptIndicator.ASK_PRICE,
+        OptIndicator.STRIKE_PRICE,
+        OptIndicator.STRIKE_DATE_TIMESTAMP,
+        OptIndicator.OPTION_TYPE,
+        OptIndicator.IMPLIED_VOLATILITY,
+        OptIndicator.DELTA,
+    ):
+        req.add_option_retrieve(field)
+
+    ret, data = quote_ctx.get_option_screen(req)
+    if ret != RET_OK:
+        raise RuntimeError(f"get_option_screen failed: {data}")
+
+    _, _, screen = data
+    rows = frame_to_records(screen)
+    by_symbol = {}
+    for row in rows:
+        symbol = option_screen_symbol(row)
+        if not symbol or is_non_single_stock_symbol(symbol):
+            continue
+        volume = number(row.get("volume"))
+        bucket = by_symbol.setdefault(
+            symbol,
+            {
+                "symbol": symbol,
+                "optionVolume": 0,
+                "optionTurnover": 0,
+                "topContracts": [],
+            },
+        )
+        bucket["optionVolume"] += volume
+        bucket["optionTurnover"] += number(row.get("turnover"))
+        if len(bucket["topContracts"]) < 5:
+            bucket["topContracts"].append(normalize_option_screen_row(row))
+
+    ranked = sorted(by_symbol.values(), key=lambda item: item["optionVolume"], reverse=True)
+    for item in ranked[:max_symbols]:
+        STOCK_META[item["symbol"]] = {
+            "name": item["symbol"],
+            "stockOptionVolume": item["optionVolume"],
+            "stockOptionTurnover": item["optionTurnover"],
+            "topOptionContracts": item["topContracts"],
+        }
+    return [item["symbol"] for item in ranked[:max_symbols]]
+
+
+def is_non_single_stock_symbol(symbol):
+    if os.getenv("FUTU_INCLUDE_ETF_OPTIONS", "0") == "1":
+        return False
+    normalized = str(symbol or "").upper().strip()
+    extra = parse_symbol_set(os.getenv("FUTU_EXCLUDE_OPTION_UNDERLYINGS", ""))
+    return normalized in DEFAULT_NON_SINGLE_STOCK_SYMBOLS or normalized in extra
+
+
+def parse_symbol_set(value):
+    return {
+        item.strip().upper()
+        for item in str(value or "").replace(";", ",").split(",")
+        if item.strip()
+    }
+
+
+def option_screen_symbol(row):
+    name = str(row.get("option_name") or "")
+    if name:
+        symbol = name.split(" ", 1)[0].strip().upper()
+        if symbol:
+            return symbol
+    code = str(row.get("code") or "")
+    if code.startswith("US."):
+        raw = code.split(".", 1)[1]
+        for marker in ("2", "1"):
+            idx = raw.find(marker)
+            if idx > 0:
+                return raw[:idx]
+    return ""
+
+
+def normalize_option_screen_row(row):
+    return {
+        "code": row.get("code", ""),
+        "name": row.get("option_name", ""),
+        "type": "call" if int(number(row.get("option_type"))) == 1 else "put" if int(number(row.get("option_type"))) == 2 else "",
+        "expiration": parse_option_screen_date(row.get("strike_date")),
+        "strike": number(row.get("strike_price")),
+        "volume": number(row.get("volume")),
+        "openInterest": number(row.get("open_interest")),
+        "turnover": number(row.get("turnover")),
+        "last": number(row.get("price")),
+        "bid": number(row.get("bid_price")),
+        "ask": number(row.get("ask_price")),
+        "iv": number(row.get("implied_volatility")),
+        "delta": number(row.get("delta")),
+    }
+
+
+def parse_option_screen_date(value):
+    text = str(value or "")
+    if len(text) == 8 and text.isdigit():
+        return f"{text[:4]}-{text[4:6]}-{text[6:8]}"
+    return text
 
 
 def code_to_symbol(code):
@@ -413,16 +764,29 @@ def fetch_option_quotes(quote_ctx, option_codes):
     for start in range(0, len(option_codes), batch_size):
         batch = option_codes[start : start + batch_size]
         quote_ctx.subscribe(batch, [SubType.QUOTE], subscribe_push=False)
-        ret, snapshot = quote_ctx.get_market_snapshot(batch)
-        quote_ctx.unsubscribe(batch, [SubType.QUOTE])
-        if ret != RET_OK:
-            raise RuntimeError(f"get_market_snapshot failed: {snapshot}")
-        for row in frame_to_records(snapshot):
-            code = row.get("code")
-            if code:
-                quotes[code] = row
-        time.sleep(0.25)
+        try:
+            snapshot = get_market_snapshot_with_retry(quote_ctx, batch)
+            for row in frame_to_records(snapshot):
+                code = row.get("code")
+                if code:
+                    quotes[code] = row
+        finally:
+            quote_ctx.unsubscribe(batch, [SubType.QUOTE])
+        time.sleep(0.55)
     return quotes
+
+
+def get_market_snapshot_with_retry(quote_ctx, batch):
+    attempts = int(os.getenv("FUTU_SNAPSHOT_RETRIES", "3"))
+    for attempt in range(attempts):
+        ret, snapshot = quote_ctx.get_market_snapshot(batch)
+        if ret == RET_OK:
+            return snapshot
+        message = str(snapshot)
+        if attempt < attempts - 1 and ("频率" in message or "frequency" in message.lower()):
+            time.sleep(31)
+            continue
+        raise RuntimeError(f"get_market_snapshot failed: {snapshot}")
 
 
 def normalize_codes(chain):
@@ -520,6 +884,11 @@ def analyze_symbol(symbol, rows, leap_days):
     hot = max(leap_calls, key=lambda item: item["volume"], default={})
     company_name = STOCK_META.get(symbol, {}).get("name") or infer_name(symbol, rows)
     stock_dollar_volume = STOCK_META.get(symbol, {}).get("stockDollarVolume", 0)
+    stock_volume = STOCK_META.get(symbol, {}).get("stockVolume", 0)
+    stock_option_volume = STOCK_META.get(symbol, {}).get("stockOptionVolume", 0)
+    stock_option_turnover = STOCK_META.get(symbol, {}).get("stockOptionTurnover", 0)
+    source_top_contracts = STOCK_META.get(symbol, {}).get("topOptionContracts", [])
+    option_chain_expirations = STOCK_META.get(symbol, {}).get("optionChainExpirations", [])
     option_chain_rows = build_option_chain_rows(rows, today, leap_days)
     score = score_record(
         leap_ratio=leap_ratio,
@@ -551,6 +920,12 @@ def analyze_symbol(symbol, rows, leap_days):
         "hotContractPremium": hot.get("premium", 0),
         "premiumFlow": premium_flow,
         "stockDollarVolume": stock_dollar_volume,
+        "stockVolume": stock_volume,
+        "stockOptionVolume": stock_option_volume,
+        "stockOptionTurnover": stock_option_turnover,
+        "sourceTopOptionContracts": source_top_contracts,
+        "optionChainExpirations": option_chain_expirations,
+        "optionChainExpirationCount": len(option_chain_expirations),
         "streak": 1,
         "oiTrend": "未知",
         "catalyst": "",

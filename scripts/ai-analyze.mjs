@@ -12,6 +12,7 @@ loadDotEnv(path.join(root, ".env"));
 const apiKey = process.env.OPENAI_API_KEY;
 const model = process.env.OPENAI_MODEL || "gpt-4.1-mini";
 const baseUrl = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
+const useResponsesApi = process.env.OPENAI_USE_RESPONSES !== "0" && baseUrl.includes("api.openai.com");
 
 if (!existsSync(reportPath)) {
   throw new Error("data/latest-report.json not found. Run npm run scan:futu first.");
@@ -104,6 +105,8 @@ async function analyzeRecord(record, alerts) {
     optionFlowRead: { summary: "", abnormalEvidence: [] },
     stockTradePlan: { stance: "", buyConditions: [], addConditions: [], sellOrDowngradeConditions: [], invalidation: "" },
     risks: [],
+    researchSources: [],
+    missingData: [],
     nextResearchTasks: []
   };
 
@@ -154,6 +157,13 @@ async function analyzeDailySummary(report) {
 }
 
 async function callChatJson(messages, schemaHint) {
+  if (useResponsesApi) {
+    try {
+      return await callResponsesJson(messages, schemaHint);
+    } catch (error) {
+      console.warn(`Responses API failed, falling back to chat completions: ${error.message}`);
+    }
+  }
   const response = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
     headers: {
@@ -179,6 +189,43 @@ async function callChatJson(messages, schemaHint) {
   const content = payload.choices?.[0]?.message?.content;
   if (!content) throw new Error("AI response missing content");
   return JSON.parse(content);
+}
+
+async function callResponsesJson(messages, schemaHint) {
+  const input = messages
+    .map((message) => `${message.role.toUpperCase()}:\n${message.content}`)
+    .join("\n\n");
+  const response = await fetch(`${baseUrl}/responses`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${apiKey}`,
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      model,
+      temperature: 0.2,
+      tools: [{ type: "web_search_preview" }],
+      input:
+        `${input}\n\nReturn strict JSON only. Include researchSources, missingData, and nextResearchTasks. ` +
+        `If a fact cannot be confirmed, mark it as "unknown". Do not recommend option trades. ` +
+        `Use this JSON shape as the contract: ${JSON.stringify(schemaHint)}`
+    })
+  });
+  const text = await response.text();
+  if (!response.ok) throw new Error(`Responses API ${response.status}: ${text.slice(0, 500)}`);
+  const payload = JSON.parse(text);
+  const outputText =
+    payload.output_text ||
+    (payload.output || [])
+      .flatMap((item) => item.content || [])
+      .map((item) => item.text || "")
+      .join("");
+  if (!outputText) throw new Error("Responses API missing output text");
+  return JSON.parse(stripJsonFence(outputText));
+}
+
+function stripJsonFence(text) {
+  return String(text).trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "");
 }
 
 async function updateDatabase(report) {

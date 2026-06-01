@@ -239,6 +239,42 @@ textarea {
   margin-bottom: 18px;
 }
 
+.job-status-panel {
+  margin-bottom: 18px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.job-status-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.job-status-grid article {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8f3ea;
+}
+
+.job-status-grid span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.job-status-grid strong {
+  display: block;
+  margin-top: 6px;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
 .section-head {
   display: flex;
   align-items: end;

@@ -20,6 +20,7 @@
         <nav class="nav">
           <button class="nav-button active" data-view="dashboard">异常榜</button>
           <button class="nav-button" data-view="research">研究报告</button>
+          <button class="nav-button" data-view="backtest">Backtest</button>
           <button class="nav-button" data-view="history">历史查询</button>
           <button class="nav-button" data-view="pipeline">数据录入</button>
           <button class="nav-button" data-view="framework">监控框架</button>
@@ -49,6 +50,17 @@
         </header>
 
         <section id="dashboardView" class="view active">
+          <section class="job-status-panel">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Automation</p>
+                <h3>After-close Futu job</h3>
+              </div>
+              <span id="jobStatusText">Loading...</span>
+            </div>
+            <div id="jobStatusGrid" class="job-status-grid"></div>
+          </section>
+
           <div class="stats-grid">
             <article>
               <span>平均 LEAP 比</span>
@@ -124,6 +136,71 @@
               </thead>
               <tbody id="alertRows"></tbody>
             </table>
+          </div>
+        </section>
+
+        <section id="backtestView" class="view">
+          <div class="history-layout">
+            <section class="form-card">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow">Stock Return Backtest</p>
+                  <h3>20 / 60 / 120 trading-day summary</h3>
+                </div>
+                <button id="refreshBacktest" class="secondary" type="button">Refresh</button>
+              </div>
+              <div class="table-frame compact-frame">
+                <table class="history-table">
+                  <thead>
+                    <tr>
+                      <th>Horizon</th>
+                      <th>Group</th>
+                      <th>Done / Total</th>
+                      <th>Win rate</th>
+                      <th>Avg return</th>
+                      <th>Median</th>
+                      <th>Max DD</th>
+                    </tr>
+                  </thead>
+                  <tbody id="backtestSummaryRows"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="form-card">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow">Signal Details</p>
+                  <h3>Top5 option-volume signal rows</h3>
+                </div>
+                <div class="history-search">
+                  <input id="backtestTicker" placeholder="Ticker" />
+                  <select id="backtestHorizon">
+                    <option value="">All</option>
+                    <option value="20">20D</option>
+                    <option value="60">60D</option>
+                    <option value="120">120D</option>
+                  </select>
+                </div>
+              </div>
+              <div class="table-frame compact-frame">
+                <table class="history-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Ticker</th>
+                      <th>Horizon</th>
+                      <th>Entry</th>
+                      <th>Exit</th>
+                      <th>Return</th>
+                      <th>Score</th>
+                      <th>Source contracts</th>
+                    </tr>
+                  </thead>
+                  <tbody id="backtestSignalRows"></tbody>
+                </table>
+              </div>
+            </section>
           </div>
         </section>
 

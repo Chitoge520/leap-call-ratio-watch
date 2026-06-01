@@ -9,8 +9,12 @@
     "scan:alpha": "node scripts/scan-alpha-vantage.mjs",
     "scan:futu": "python scripts/scan_futu.py",
     "scan:futu:liquid": "set FUTU_USE_DOLLAR_VOLUME_UNIVERSE=1&& set FUTU_MIN_STOCK_DOLLAR_VOLUME=1000000000&& python scripts/scan_futu.py",
+    "scan:futu:volume": "set FUTU_USE_OPTION_VOLUME_UNIVERSE=1&& set FUTU_OPTION_SCREEN_CONTRACTS=500&& set FUTU_MAX_SYMBOLS=5&& python scripts/scan_futu.py",
+    "scan:futu:stock-volume": "set FUTU_USE_VOLUME_UNIVERSE=1&& set FUTU_UNIVERSE_SORT_FIELD=volume&& set FUTU_MIN_STOCK_VOLUME=1&& set FUTU_MAX_SYMBOLS=5&& python scripts/scan_futu.py",
     "analyze:ai": "node scripts/ai-analyze.mjs",
-    "check": "node --check app.js && node --check server.mjs && node --check scripts/scan.mjs && node --check scripts/scan-alpha-vantage.mjs"
+    "backtest:futu": "python scripts/backtest_futu.py",
+    "daily:futu": "node scripts/daily-futu-pipeline.mjs",
+    "check": "node --check app.js && node --check server.mjs && node --check scripts/scan.mjs && node --check scripts/scan-alpha-vantage.mjs && node --check scripts/ai-analyze.mjs && node --check scripts/daily-futu-pipeline.mjs"
   },
   "dependencies": {
     "sqlite3": "^5.1.7"

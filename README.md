@@ -199,6 +199,56 @@ npm start
 
 打开 `http://localhost:4173`，点击右上角 `⇣` 读取最新报告。
 
+### 期权成交量 Top5、盘后任务和回测
+
+按全市场期权合约成交量扫描，并聚合到正股 Top5：
+
+```bash
+npm run scan:futu:volume
+```
+
+这个模式使用 Futu `get_option_screen(OptMarketCategory.US_STOCK)`，按期权合约成交量取前 `FUTU_OPTION_SCREEN_CONTRACTS=500` 个合约，再按 ticker 聚合成 Top5。Top5 全部进入报告；`minLeapCallVolume` 和 LEAP 比例只作为标签、评分和回测分组，不再过滤展示。
+
+默认会剔除 ETF、指数和指数代理产品，例如 `SPY`、`QQQ`、`IWM`、`DIA`、`TQQQ`、`SQQQ`、`SPX`、`NDX`、`RUT`、`VIX` 以及常见行业 ETF，只保留单独股票的期权。可以用环境变量追加排除项，或临时打开 ETF：
+
+```text
+FUTU_EXCLUDE_OPTION_UNDERLYINGS=SPY,QQQ,IWM,DIA,TQQQ,SQQQ,SPX,NDX,RUT,VIX
+FUTU_INCLUDE_ETF_OPTIONS=0
+```
+
+`npm start` 会启动常驻 Web 服务和盘后自动任务。默认配置：
+
+```text
+AUTO_SCAN_ENABLED=1
+AUTO_SCAN_TIME_ET=16:30
+FUTU_OPTION_SCREEN_CONTRACTS=500
+FUTU_MAX_SYMBOLS=5
+FUTU_MIN_EXPIRATIONS_OPTION_VOLUME=12
+FUTU_LEAP_EXPIRATIONS_OPTION_VOLUME=8
+```
+
+`FUTU_MIN_EXPIRATIONS_OPTION_VOLUME=12` 用来保护正式的期权成交量 Top5 扫描：即使某次调试在环境里留下了 `FUTU_MAX_EXPIRATIONS=1`，该模式也至少会抓取前 12 个近端到期日，避免完整期权链只剩当天/近月合约。`FUTU_LEAP_EXPIRATIONS_OPTION_VOLUME=8` 会额外抓取 180 天以上的 LEAP 到期日，避免周度期权很多的股票只覆盖到近月。
+
+任务触发时会先检查 OpenD 连接，并用 Futu 美股交易日接口跳过休市日。状态可在 Web 首页查看，也可访问：
+
+```text
+/api/job/status
+```
+
+回测只验证正股收益，不验证期权合约收益。入口价是扫描日正股收盘价，退出价是之后第 20/60/120 个美股交易日收盘价：
+
+```bash
+npm run backtest:futu
+```
+
+Web 的 Backtest 页展示汇总和明细；接口包括：
+
+```text
+/api/backtest/summary
+/api/backtest/signals
+/api/backtest/ticker?ticker=NVDA
+```
+
 注意事项：
 
 - 美股代码在富途里会转换成 `US.NOK`、`US.AAPL` 这种格式。

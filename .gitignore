@@ -8,6 +8,7 @@ npm-debug.log*
 reports/
 data/*.db
 data/*.db-*
+data/job-status.json
 *.log
 .DS_Store
 Thumbs.db
