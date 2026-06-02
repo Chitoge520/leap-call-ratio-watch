@@ -1,117 +1,330 @@
-# LEAP Call Ratio 异常监控台
+# LEAP Call Ratio Watch
 
-这是一个本地使用的美股期权异常观察网页项目。它围绕 LEAP call ratio、C/P、call 成交占比、权利金流、连续上榜天数和 OI 趋势生成异常榜，并把单票数据整理成类似交易研究札记的观察报告。
+本项目是一个本地运行的美股期权异动研究系统。主流程使用 Futu OpenD 扫描美股市场中“单独股票”的期权成交量异动 Top5，生成股票研究报告，并用正股价格做 20 / 60 / 120 个交易日收益回测。
 
-## 直接使用
+期权只作为资金流和研究线索，不输出期权买卖建议。回测验证的是正股买卖表现，不是期权合约收益。
 
-打开 `index.html` 即可运行，不需要安装依赖。
+## 核心功能
 
-如果要读取自动扫描生成的数据，建议启动本地服务器：
+- 期权成交量 Top5：使用 Futu `get_option_screen(OptMarketCategory.US_STOCK)` 按期权合约成交量扫描，再聚合到股票维度。
+- 指数/ETF 剔除：默认排除 `SPY`、`QQQ`、`IWM`、`DIA`、`TQQQ`、`SQQQ`、`SPX`、`NDX`、`RUT`、`VIX` 等指数或 ETF 相关期权。
+- 远月合约验证：正式期权成交量扫描会额外抓取 LEAP 到期日，避免只看到当日或近月合约。
+- AI 研究报告：用 OpenAI Responses API 生成五段式个股研究；没有 API key 时会标记 `aiStatus.skipped`，前端展示本地规则分析和缺口提示。
+- 盘后自动任务：`npm start` 常驻服务会在美东 `16:30` 检查 OpenD 和美股交易日，满足条件后自动扫描、分析并增量回测。
+- 正股回测：对每天 Top5 信号，使用 Futu 日线计算扫描日后第 20 / 60 / 120 个美股交易日的正股收益。
+- Web 展示：包含异常榜、AI 研究报告、历史报告、Backtest 汇总/明细、任务状态和数据导入导出。
+
+## 快速启动
+
+安装依赖：
+
+```bash
+npm install
+pip install -r requirements-futu.txt
+```
+
+启动 Futu OpenD，默认连接地址为：
+
+```text
+127.0.0.1:11111
+```
+
+启动 Web 服务：
 
 ```bash
 npm start
 ```
 
-然后打开：
+打开：
 
 ```text
 http://localhost:4173
 ```
 
-## 当前功能
+## 推荐主流程
 
-- 异常榜：按综合评分、LEAP 比、C/P、权利金流排序。
-- 研究报告：自动生成单票观察报告，回答主线、流动性、估值、产业链和交易计划。
-- 数据录入：手动新增或更新 ticker。
-- JSON 导入/导出：方便把外部扫描结果粘贴进来。
-- 自动扫描：通过 Polygon Option Chain Snapshot API 拉取期权链快照。
-- 自动报告：生成 `data/latest-report.json`、`reports/YYYY-MM-DD-leap-report.md` 和 HTML 报告。
-- 自动发送：支持 Resend 邮件 API 或通用 Webhook。
-- 本地保存：数据保存在浏览器 localStorage。
-- 示例数据：内置 NOK、INTC、T、PLTR。
+手动执行一次完整 Futu 流水线：
 
-## 五段式研究报告
+```bash
+npm run daily:futu
+```
 
-每只股票的研究页会回答：
+这个命令会依次执行：
 
 ```text
-1. 这只股票是否是现在市场上的主线
-2. 这只股票是否有充足成交量
-3. 这只股票的估值是否有预期
-4. 当前研究深度如何，上下游产业链是什么
-5. 根据期权异动、股价结构和产业逻辑生成股票买入、加仓、卖出/降级计划
+scan:futu:volume -> analyze:ai -> backtest:futu
 ```
 
-首页的 `Top 5 个股期权异动榜` 按股票去重：每只股票只保留最异常的一个期权合约作为证据，避免同一只股票的多个合约刷屏。这个榜的目的不是提示买卖期权，而是发现“哪只股票因为期权流突然值得研究”。
+如果只想扫描期权成交量 Top5：
 
-可选补充字段：
-
-```json
-{
-  "stockDollarVolume": 420000000,
-  "relativeStrength": 72,
-  "marketTheme": "疑似",
-  "valuationView": "有重估预期",
-  "researchLevel": "中",
-  "industry": "通信设备 / AI 网络基础设施",
-  "upstream": "光模块、射频器件、芯片",
-  "downstream": "运营商、云厂商、政府/国防",
-  "competitors": "ERIC、CSCO、CIEN、ANET"
-}
+```bash
+npm run scan:futu:volume
 ```
 
-如果这些字段为空，系统会根据主题、期权结构、成交量和内置行业知识先生成自动判断。
+如果只想补跑回测：
 
-## 自动获取期权数据
+```bash
+npm run backtest:futu
+```
 
-### Polygon 付费/延迟数据
+如果只想运行 AI 分析：
 
-复制环境变量模板：
+```bash
+npm run analyze:ai
+```
+
+## Futu 扫描模式
+
+### 期权成交量 Top5
+
+```bash
+npm run scan:futu:volume
+```
+
+这是当前推荐模式。它按全市场期权合约成交量取前 `FUTU_OPTION_SCREEN_CONTRACTS=500` 个合约，再按 ticker 聚合成单独股票 Top5。
+
+Top5 全部进入报告。LEAP 阈值只用于标签、评分和回测分组，不再过滤展示。
+
+### 高成交额股票池
+
+```bash
+npm run scan:futu:liquid
+```
+
+该模式先按正股成交额筛选股票池，再逐个拉取期权链。它适合验证特定高流动性股票池，但不是“期权成交量 Top5”主流程。
+
+### 正股成交量股票池
+
+```bash
+npm run scan:futu:stock-volume
+```
+
+该模式按正股每日成交量筛选股票池。注意：这不是期权成交量 Top5。
+
+### Watchlist 扫描
+
+```bash
+npm run scan:futu
+```
+
+使用 `config/watchlist.json` 中的标的逐个扫描期权链，适合手动观察固定股票列表。
+
+## 关键环境变量
+
+复制模板：
 
 ```bash
 copy .env.example .env
 ```
 
-编辑 `.env`，至少填入：
+常用配置：
 
 ```text
-POLYGON_API_KEY=你的 Polygon API Key
+FUTU_OPEND_HOST=127.0.0.1
+FUTU_OPEND_PORT=11111
+
+AUTO_SCAN_ENABLED=1
+AUTO_SCAN_TIME_ET=16:30
+
+FUTU_OPTION_SCREEN_CONTRACTS=500
+FUTU_MAX_SYMBOLS=5
+FUTU_MIN_EXPIRATIONS_OPTION_VOLUME=12
+FUTU_LEAP_EXPIRATIONS_OPTION_VOLUME=8
+
+FUTU_INCLUDE_ETF_OPTIONS=0
+FUTU_EXCLUDE_OPTION_UNDERLYINGS=SPY,QQQ,IWM,DIA,TQQQ,SQQQ,SPX,SPXW,NDX,RUT,VIX
 ```
 
-运行扫描：
+远月合约相关参数：
+
+- `FUTU_MIN_EXPIRATIONS_OPTION_VOLUME=12`：期权成交量 Top5 模式至少抓取前 12 个近端到期日，避免调试参数导致只剩 0DTE 或近月合约。
+- `FUTU_LEAP_EXPIRATIONS_OPTION_VOLUME=8`：额外抓取 180 天以上的 LEAP 到期日，确保报告能看到远月资金流。
+
+AI 配置：
+
+```text
+OPENAI_API_KEY=your_api_key
+OPENAI_MODEL=gpt-4.1-mini
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_USE_RESPONSES=1
+```
+
+如果没有配置 `OPENAI_API_KEY`，`npm run analyze:ai` 不会中断主流程，而是写入：
+
+```json
+{
+  "aiStatus": {
+    "state": "skipped",
+    "reason": "missing_openai_api_key"
+  }
+}
+```
+
+前端会显示 AI 缺失提示，并保留本地规则分析。
+
+## AI 五段式研究
+
+每个 Top5 标的固定回答 5 个问题：
+
+1. 是否属于当前市场主线。
+2. 成交量和流动性是否足够。
+3. 估值是否已经包含预期，还是存在预期差。
+4. 当前研究深度、上下游产业链和竞争格局如何。
+5. 股票买入、加仓、卖出、降级计划。
+
+输出字段包括：
+
+- `aiResearch`
+- `researchSources`
+- `missingData`
+- `nextResearchTasks`
+- `aiStatus`
+
+原则：
+
+- 优先基于 Futu 数据、期权成交量、OI、权利金、合约结构和正股表现。
+- 不能确认的内容必须标记 unknown 或写入 `missingData`。
+- 期权只作为资金流证据，不提供期权买卖建议。
+
+## 盘后自动任务
+
+`npm start` 会启动 Web 服务和自动任务。默认逻辑：
+
+1. 按美东 `AUTO_SCAN_TIME_ET=16:30` 触发。
+2. 检查 Futu OpenD 是否连接。
+3. 使用 Futu 交易日接口跳过美股休市日。
+4. 执行 `daily:futu` 流水线。
+5. 成功后写入最新报告和回测信号。
+
+任务状态 API：
+
+```text
+/api/job/status
+```
+
+Web 首页也会显示：
+
+- OpenD 连接状态
+- 是否交易日
+- 上次运行时间
+- 下次运行时间
+- 最近错误
+
+## 回测
+
+回测只验证正股收益，不验证期权收益。
+
+默认收益口径：
+
+```text
+entry = 扫描日正股收盘价
+exit = 之后第 20 / 60 / 120 个美股交易日收盘价
+```
+
+运行：
+
+```bash
+npm run backtest:futu
+```
+
+样本不足完整周期时标记为 `pending`，不会纳入已完成统计。
+
+Web Backtest 页面展示：
+
+- 样本数
+- 胜率
+- 平均收益
+- 中位数收益
+- 最大回撤
+- 20 / 60 / 120 日分组
+- LEAP 达标/未达标分组
+- Call 主导/Put 主导分组
+- Score 分层
+- 单票明细
+
+回测 API：
+
+```text
+/api/backtest/summary
+/api/backtest/signals
+/api/backtest/ticker?ticker=NVDA
+```
+
+## 数据表
+
+SQLite 数据库：
+
+```text
+data/leap_watch.db
+```
+
+核心表：
+
+```text
+stock_price_bars
+backtest_signals
+backtest_results
+reports
+```
+
+最新报告：
+
+```text
+data/latest-report.json
+```
+
+历史报告：
+
+```text
+reports/YYYY-MM-DD-futu-leap-report.md
+reports/YYYY-MM-DD-futu-leap-report.html
+```
+
+## Web 页面
+
+主要视图：
+
+- 异常榜：展示期权成交量 Top5、来源合约、评分和任务状态。
+- 研究报告：展示 AI 五段式研究、本地规则分析、数据缺口和后续研究任务。
+- Backtest：展示策略汇总和单票明细。
+- 历史查询：加载历史扫描报告，查询单票历史信号。
+- 数据录入：手动新增观察记录，支持 JSON 导入/导出。
+- 监控框架：展示研究流程和风险提示。
+
+## API
+
+```text
+/api/report
+/api/reports
+/api/ticker-history?ticker=NVDA
+/api/job/status
+/api/backtest/summary
+/api/backtest/signals
+/api/backtest/ticker?ticker=NVDA
+```
+
+## 可选旧数据源
+
+### Polygon
+
+配置：
+
+```text
+POLYGON_API_KEY=your_polygon_api_key
+```
+
+运行：
 
 ```bash
 npm run scan
 ```
 
-扫描完成后会生成：
+### Alpha Vantage
+
+配置：
 
 ```text
-data/latest-report.json
-reports/YYYY-MM-DD-leap-report.md
-reports/YYYY-MM-DD-leap-report.html
-```
-
-启动网页后，右上角点击 `⇣` 可以读取最新自动报告。
-
-### Alpha Vantage 免费验证版
-
-如果你只是想先验证程序是否可行，可以先用 Alpha Vantage 的免费 API key。它的免费额度和字段稳定性不适合大规模正式监控，但足够验证这条链路：
-
-```text
-获取期权链 -> 识别 180 天以上 LEAP call -> 计算比率 -> 生成报告 -> Web 端读取
-```
-
-申请免费 key：
-
-```text
-https://www.alphavantage.co/support/#api-key
-```
-
-在 `.env` 中填写：
-
-```text
-ALPHAVANTAGE_API_KEY=你的 Alpha Vantage API Key
+ALPHAVANTAGE_API_KEY=your_alpha_vantage_api_key
 ```
 
 运行：
@@ -120,264 +333,22 @@ ALPHAVANTAGE_API_KEY=你的 Alpha Vantage API Key
 npm run scan:alpha
 ```
 
-注意：免费 key 通常有严格频率限制，所以脚本默认最多扫描 watchlist 前 10 个标的，并在请求之间等待。若报告没有入选标的，可以临时降低 `config/watchlist.json` 里的 `minTotalOptionVolume` 和 `minLeapCallVolume`。
+这两个入口主要用于早期验证和备用数据源。当前主流程建议使用 Futu OpenD。
 
-### 富途 OpenD 数据源
-
-富途更适合本地盘后研究，因为程序通过本机 OpenD 网关读取行情。官方文档里，`get_option_chain` 用于通过标的股票查询期权链；它主要返回期权链静态信息，若要获取报价、成交、OI 等动态数据，需要用返回的期权合约代码再订阅/获取行情快照。
-
-参考：
-
-- 富途获取期权链：`https://openapi.futunn.com/futu-api-doc/quote/get-option-chain.html`
-- 富途行情接口总览：`https://openapi.futunn.com/futu-api-doc/quote/overview.html`
-- 富途 OpenAPI 下载：`https://www.futunn.com/en/download/OpenAPI`
-
-使用步骤：
-
-1. 安装并启动 Futu OpenD。
-2. 确认 OpenD 监听地址，一般是：
-
-```text
-127.0.0.1:11111
-```
-
-3. 安装 Python SDK：
+## 检查命令
 
 ```bash
-pip install -r requirements-futu.txt
+npm run check
+python -m py_compile scripts\scan_futu.py scripts\backtest_futu.py scripts\futu_healthcheck.py
 ```
 
-4. 如你修改过 OpenD 端口，在 `.env` 里设置：
-
-```text
-FUTU_OPEND_HOST=127.0.0.1
-FUTU_OPEND_PORT=11111
-```
-
-5. 运行富途扫描：
-
-```bash
-npm run scan:futu
-```
-
-如果要按“股票成交额超过 10 亿美元”的美股股票池扫描，而不是使用 `config/watchlist.json`，运行：
-
-```bash
-npm run scan:futu:liquid
-```
-
-这会先从富途美股基础池获取股票列表，再批量读取快照，用 `turnover >= 1,000,000,000` 筛选股票，最后扫描这些股票的期权链。
-
-可选环境变量：
-
-```text
-FUTU_USE_DOLLAR_VOLUME_UNIVERSE=1
-FUTU_MIN_STOCK_DOLLAR_VOLUME=1000000000
-FUTU_MAX_SYMBOLS=20
-FUTU_MAX_DAYS=420
-```
-
-说明：
-
-- 不设置 `FUTU_MAX_SYMBOLS` 时，会尽量扫描所有成交额超过 10 亿美元的股票。
-- 设置 `FUTU_MAX_SYMBOLS=20` 可以先验证前 20 只，速度更可控。
-- `FUTU_MAX_DAYS` 控制扫描未来多少期权到期日；数值越大，越慢，但覆盖 LEAP 更完整。
-
-它会生成：
-
-```text
-data/latest-report.json
-reports/YYYY-MM-DD-futu-leap-report.md
-reports/YYYY-MM-DD-futu-leap-report.html
-```
-
-然后启动 Web 端：
-
-```bash
-npm start
-```
-
-打开 `http://localhost:4173`，点击右上角 `⇣` 读取最新报告。
-
-### 期权成交量 Top5、盘后任务和回测
-
-按全市场期权合约成交量扫描，并聚合到正股 Top5：
-
-```bash
-npm run scan:futu:volume
-```
-
-这个模式使用 Futu `get_option_screen(OptMarketCategory.US_STOCK)`，按期权合约成交量取前 `FUTU_OPTION_SCREEN_CONTRACTS=500` 个合约，再按 ticker 聚合成 Top5。Top5 全部进入报告；`minLeapCallVolume` 和 LEAP 比例只作为标签、评分和回测分组，不再过滤展示。
-
-默认会剔除 ETF、指数和指数代理产品，例如 `SPY`、`QQQ`、`IWM`、`DIA`、`TQQQ`、`SQQQ`、`SPX`、`NDX`、`RUT`、`VIX` 以及常见行业 ETF，只保留单独股票的期权。可以用环境变量追加排除项，或临时打开 ETF：
-
-```text
-FUTU_EXCLUDE_OPTION_UNDERLYINGS=SPY,QQQ,IWM,DIA,TQQQ,SQQQ,SPX,NDX,RUT,VIX
-FUTU_INCLUDE_ETF_OPTIONS=0
-```
-
-`npm start` 会启动常驻 Web 服务和盘后自动任务。默认配置：
-
-```text
-AUTO_SCAN_ENABLED=1
-AUTO_SCAN_TIME_ET=16:30
-FUTU_OPTION_SCREEN_CONTRACTS=500
-FUTU_MAX_SYMBOLS=5
-FUTU_MIN_EXPIRATIONS_OPTION_VOLUME=12
-FUTU_LEAP_EXPIRATIONS_OPTION_VOLUME=8
-```
-
-`FUTU_MIN_EXPIRATIONS_OPTION_VOLUME=12` 用来保护正式的期权成交量 Top5 扫描：即使某次调试在环境里留下了 `FUTU_MAX_EXPIRATIONS=1`，该模式也至少会抓取前 12 个近端到期日，避免完整期权链只剩当天/近月合约。`FUTU_LEAP_EXPIRATIONS_OPTION_VOLUME=8` 会额外抓取 180 天以上的 LEAP 到期日，避免周度期权很多的股票只覆盖到近月。
-
-任务触发时会先检查 OpenD 连接，并用 Futu 美股交易日接口跳过休市日。状态可在 Web 首页查看，也可访问：
-
-```text
-/api/job/status
-```
-
-回测只验证正股收益，不验证期权合约收益。入口价是扫描日正股收盘价，退出价是之后第 20/60/120 个美股交易日收盘价：
-
-```bash
-npm run backtest:futu
-```
-
-Web 的 Backtest 页展示汇总和明细；接口包括：
-
-```text
-/api/backtest/summary
-/api/backtest/signals
-/api/backtest/ticker?ticker=NVDA
-```
-
-注意事项：
-
-- 美股代码在富途里会转换成 `US.NOK`、`US.AAPL` 这种格式。
-- 第一次验证时建议把 `config/watchlist.json` 里的标的减少到 5-10 个，避免触发订阅/频率限制。
-- 富途 `get_option_chain` 限制每次时间跨度不超过 30 天，并且每 30 秒最多 10 次请求；扫描器已按到期日查询并自动节流，所以完整 watchlist 可能需要几分钟。
-- 如果报告为空，先降低 `minTotalOptionVolume` 和 `minLeapCallVolume`，确认链路能跑通。
-- OI 不是实时资金流，通常需要次日再看是否增长，用来确认“这笔钱是否留下来”。
-
-## 自动发送报告
-
-### 邮件发送
-
-在 `.env` 中配置：
-
-```text
-RESEND_API_KEY=你的 Resend API Key
-REPORT_FROM=LEAP Watch <reports@yourdomain.com>
-REPORT_TO=you@example.com
-```
-
-然后运行：
-
-```bash
-npm run scan
-```
-
-### Webhook 发送
-
-适合接 Discord、Slack、Telegram bot、n8n、Make 或自己的接口。
-
-```text
-REPORT_WEBHOOK_URL=https://your-webhook-url
-```
-
-## AI 分析层
-
-AI 分析层只基于富途 OpenD 采集到的真实数据、期权链、OI、成交量和权利金做研究，不编造新闻或估值数字。输出的交易计划是股票买入/卖出计划，期权只作为资金流证据。
-
-在 `.env` 中配置：
-
-```text
-OPENAI_API_KEY=你的 API Key
-OPENAI_MODEL=gpt-4.1-mini
-OPENAI_BASE_URL=https://api.openai.com/v1
-```
-
-运行流程：
-
-```bash
-npm run scan:futu:liquid
-npm run analyze:ai
-npm start
-```
-
-如果你使用 OpenAI-compatible 的其他模型服务，修改 `OPENAI_BASE_URL` 和 `OPENAI_MODEL` 即可。
-
-AI 会把结果写回：
-
-```text
-data/latest-report.json
-data/leap_watch.db
-```
-
-前端个股研究页会优先展示 `AI 基于富途真实数据的分析` 模块。
-
-## 定时运行
-
-Windows 可以用任务计划程序每天美股收盘后运行：
-
-```text
-程序：node
-参数：scripts/scan.mjs
-起始目录：C:\Users\80941\Documents\Codex\2026-05-27\leap-call-ratio
-```
-
-建议时间：美东 16:30 之后，也就是北京时间夏令时次日 04:30 之后、冬令时次日 05:30 之后。
-
-## 综合评分
-
-当前评分是研究优先级，不是买卖建议。
-
-```text
-score =
-  LEAP 比权重
-+ C/P 权重
-+ Call 成交占比权重
-+ 权利金流权重
-+ 连续上榜权重
-+ OI 趋势权重
-```
-
-系统重点寻找这种结构：
-
-```text
-远月 call 高浓度
-+ C/P 偏强
-+ Call 成交占比高
-+ 连续多日上榜
-+ OI 增长
-+ 公司叙事可以解释这笔钱
-```
-
-## 建议的数据字段
-
-导入 JSON 时，每条记录建议包含：
-
-```json
-{
-  "ticker": "NOK",
-  "name": "Nokia",
-  "theme": "AI 网络基础设施 + 光网络 + 国防通信供应链重估",
-  "date": "2026-05-27",
-  "cpRatio": 5.32,
-  "leapRatio": 16.64,
-  "totalVolume": 345900,
-  "callVolume": 291200,
-  "hotContract": "260618.C.15",
-  "premiumFlow": 18800000,
-  "streak": 3,
-  "oiTrend": "增长",
-  "catalyst": "远月 call 连续多日高浓度，市场可能在押 Network Infrastructure 恢复。",
-  "risk": "若最热合约 OI 停止增长，异动可能退化为 meme flow。"
-}
-```
-
-## 后续升级方向
-
-- 接入 Polygon / ORATS / Tradier / Nasdaq Data Link。
-- 增加每日定时任务，自动拉取期权链、成交、OI、Greeks。
-- 增加股票价格、相对强度、财报日、新闻催化和行业 ETF 对比。
-- 增加历史回测，验证 LEAP call ratio 异常后的 20/60/120 日表现。
-- 增加单票时间序列，跟踪 LEAP 比和 OI 是否持续。
+如果系统 PATH 没有 `python`，请使用你安装了 `futu-api` 的 Python 解释器。
+
+## 注意事项
+
+- Futu 里的美股代码通常使用 `US.NVDA` 这种格式，报告中会转换为普通 ticker 展示。
+- OpenD 未启动时，自动任务会跳过，并在 `/api/job/status` 显示 disconnected。
+- 非交易日不会生成空报告。
+- 期权成交量 Top5 默认剔除指数和 ETF；如果确实要包含 ETF，可设置 `FUTU_INCLUDE_ETF_OPTIONS=1`。
+- OI 通常需要次日再确认，不能把单日成交量直接等同于持续持仓。
+- 本系统用于研究和回测，不构成投资建议。
