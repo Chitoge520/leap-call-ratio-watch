@@ -12,6 +12,8 @@ const dbPath = path.join(root, "data", "leap_watch.db");
 const jobStatusPath = path.join(root, "data", "job-status.json");
 const autoScanEnabled = process.env.AUTO_SCAN_ENABLED !== "0";
 const autoScanTimeEt = process.env.AUTO_SCAN_TIME_ET || "16:30";
+const autoPremarketEnabled = process.env.AUTO_PREMARKET_ENABLED !== "0";
+const autoPremarketTimeEt = process.env.AUTO_PREMARKET_TIME_ET || "08:30";
 const jobState = loadJobState();
 
 const mime = {
@@ -307,7 +309,7 @@ function startScheduler() {
   persistJobState();
   setTimeout(refreshOpenDStatus, 1000);
   setInterval(refreshOpenDStatus, 5 * 60_000);
-  if (!autoScanEnabled) return;
+  if (!autoScanEnabled && !autoPremarketEnabled) return;
   setTimeout(checkScheduler, 2500);
   setInterval(checkScheduler, 60_000);
 }
@@ -336,21 +338,39 @@ async function refreshOpenDStatus() {
 }
 
 async function checkScheduler() {
-  if (jobState.running || !autoScanEnabled) return;
+  if (jobState.running) return;
   const et = getEtParts();
   const nowMinutes = Number(et.hour) * 60 + Number(et.minute);
-  const targetMinutes = parseTimeToMinutes(autoScanTimeEt);
-  if (nowMinutes < targetMinutes || jobState.lastRunDateEt === et.date) return;
+  const premarketMinutes = parseTimeToMinutes(autoPremarketTimeEt);
+  const closeMinutes = parseTimeToMinutes(autoScanTimeEt);
+  if (autoPremarketEnabled && nowMinutes >= premarketMinutes && jobState.lastPremarketRunDateEt !== et.date) {
+    await runScheduledPipeline({
+      dateEt: et.date,
+      kind: "premarket",
+      script: ["node", ["scripts/premarket-futu-pipeline.mjs"]]
+    });
+    return;
+  }
+  if (!autoScanEnabled || nowMinutes < closeMinutes || jobState.lastRunDateEt === et.date) return;
 
+  await runScheduledPipeline({
+    dateEt: et.date,
+    kind: "after_close",
+    script: ["node", ["scripts/daily-futu-pipeline.mjs"]]
+  });
+}
+
+async function runScheduledPipeline({ dateEt, kind, script }) {
   jobState.running = true;
+  jobState.runningKind = kind;
   jobState.lastAttemptAt = new Date().toISOString();
-  jobState.lastAttemptDateEt = et.date;
+  jobState.lastAttemptDateEt = dateEt;
   jobState.lastStatus = "checking";
   jobState.error = "";
   persistJobState();
 
   try {
-    const health = await runJson("python", ["scripts/futu_healthcheck.py", "--trading-day", et.date]);
+    const health = await runJson("python", ["scripts/futu_healthcheck.py", "--trading-day", dateEt]);
     jobState.openD = health;
     if (!health.connected) {
       jobState.lastStatus = "disconnected";
@@ -359,20 +379,27 @@ async function checkScheduler() {
     }
     if (!health.isTradingDay) {
       jobState.lastStatus = "skipped_non_trading_day";
-      jobState.lastRunDateEt = et.date;
+      if (kind === "premarket") jobState.lastPremarketRunDateEt = dateEt;
+      else jobState.lastRunDateEt = dateEt;
       return;
     }
     jobState.lastStatus = "running";
     persistJobState();
-    await runProcess("node", ["scripts/daily-futu-pipeline.mjs"]);
+    await runProcess(script[0], script[1]);
     jobState.lastStatus = "success";
-    jobState.lastRunAt = new Date().toISOString();
-    jobState.lastRunDateEt = et.date;
+    if (kind === "premarket") {
+      jobState.lastPremarketRunAt = new Date().toISOString();
+      jobState.lastPremarketRunDateEt = dateEt;
+    } else {
+      jobState.lastRunAt = new Date().toISOString();
+      jobState.lastRunDateEt = dateEt;
+    }
   } catch (error) {
     jobState.lastStatus = "error";
     jobState.error = error.message;
   } finally {
     jobState.running = false;
+    jobState.runningKind = "";
     updateNextRun();
     persistJobState();
   }
@@ -383,6 +410,8 @@ function buildPublicJobState() {
   return {
     enabled: autoScanEnabled,
     scheduleTimeEt: autoScanTimeEt,
+    premarketEnabled: autoPremarketEnabled,
+    premarketScheduleTimeEt: autoPremarketTimeEt,
     ...jobState
   };
 }
@@ -390,12 +419,18 @@ function buildPublicJobState() {
 function updateNextRun() {
   const et = getEtParts();
   const targetMinutes = parseTimeToMinutes(autoScanTimeEt);
+  const premarketMinutes = parseTimeToMinutes(autoPremarketTimeEt);
   const nowMinutes = Number(et.hour) * 60 + Number(et.minute);
   let nextDate = et.date;
   if (nowMinutes >= targetMinutes || jobState.lastRunDateEt === et.date) {
     nextDate = addDaysIso(et.date, 1);
   }
   jobState.nextRunEt = `${nextDate} ${autoScanTimeEt}`;
+  let nextPremarketDate = et.date;
+  if (nowMinutes >= premarketMinutes || jobState.lastPremarketRunDateEt === et.date) {
+    nextPremarketDate = addDaysIso(et.date, 1);
+  }
+  jobState.nextPremarketRunEt = `${nextPremarketDate} ${autoPremarketTimeEt}`;
 }
 
 function runJson(command, args) {
@@ -460,10 +495,14 @@ function loadJobState() {
     lastStatus: "idle",
     lastRunAt: "",
     lastRunDateEt: "",
+    lastPremarketRunAt: "",
+    lastPremarketRunDateEt: "",
     lastAttemptAt: "",
     lastAttemptDateEt: "",
     nextRunEt: "",
+    nextPremarketRunEt: "",
     error: "",
+    runningKind: "",
     openD: { connected: false, isTradingDay: false }
   };
 }

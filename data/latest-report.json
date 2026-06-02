@@ -4758,7 +4758,250 @@
         }
       ],
       "qualifiedByLeapThreshold": true,
-      "leapThresholdReason": "pass"
+      "leapThresholdReason": "pass",
+      "aiAnalysis": {
+        "executiveSummary": "AMZN期权资金流显示极强的长期看涨倾向，主要集中于2027年1月到期的虚值与平值看涨期权。然而，缺乏基本面、新闻及行业对比数据，无法确认估值与催化剂，整体决策需等待更多信息。",
+        "tradingAgentsReview": {
+          "fundamentalsAnalyst": {
+            "thesis": "无基本面数据，无法判断公司质量与估值。",
+            "evidence": [],
+            "unknowns": [
+              "最新财务表现与增长趋势",
+              "估值倍数是否合理",
+              "利润率变动及资本支出变化"
+            ]
+          },
+          "sentimentNewsAnalyst": {
+            "thesis": "无新闻信息，无法评估市场情绪与近期催化剂。",
+            "evidence": [],
+            "unknowns": [
+              "近期业绩公告或重大合作",
+              "分析师评级变动",
+              "舆论情绪与关键叙事"
+            ]
+          },
+          "technicalFlowAnalyst": {
+            "thesis": "期权市场呈现极度看涨资金流，LEAP看涨期权成交密集，反映机构大规模布局上行。但需警惕虚值期权投机成分。",
+            "nearTermContractRead": "近端合约（如6月5日270C）成交量尚可，但远低于LEAP合约，短期情绪不明朗。",
+            "leapContractRead": "2027年1月到期的275C、300C、250C成交与持仓极高，权利金巨大，显示资金对2027年前持续上涨的强烈预期。IV处于中等水平，未出现恐慌性抢购。",
+            "evidence": [
+              "2027年1月275C成交量200,706张，持仓207,086张，权利金5.4亿美元",
+              "2027年1月300C成交量102,777张，持仓138,498张",
+              "整体Put/Call比率4.36，LEAP Put/Call比率27.57，极端看涨",
+              "LEAP看涨总成交量431,088张 vs 看跌15,638张，权利金总流入11.86亿美元"
+            ],
+            "counterEvidence": [
+              "部分深度虚值看涨期权（如410C）有投机嫌疑",
+              "看跌期权持仓集中在较低行权价，可能为保护性对冲"
+            ]
+          },
+          "bullResearcher": {
+            "thesis": "市场预期AMZN核心业务（AWS云计算、广告、AI）将延续强劲增长，推动股价在2027年前显著上行。期权资金流显示出强烈的机构买入意愿。",
+            "strongestEvidence": [
+              "LEAP看涨期权权利金总流入超过11.8亿美元，规模庞大",
+              "关键行权价275/300/250的看涨合约持仓极高，表明持续买盘",
+              "低IV环境与高成交量组合偏向于方向性建仓而非避险"
+            ]
+          },
+          "bearResearcher": {
+            "thesis": "纯期权资金流可能包含对冲、做市商活动或错误定价，并不一定反映基本面改善。缺乏盈利支撑的乐观可能面临估值风险，且宏观与竞争压力不可忽视。",
+            "strongestRisks": [
+              "无法排除资金流为技术性对冲或策略性组合（如波动率交易）",
+              "缺乏基本面数据，若增长放缓将形成预期差",
+              "反垄断与监管收紧可能压制估值",
+              "云计算市场竞争激烈，利润空间可能收窄"
+            ]
+          },
+          "riskManager": {
+            "riskLevel": "medium",
+            "reasons": [
+              "数据缺失导致无法评估基本面风险与估值风险",
+              "高度集中的看涨持仓若反转可能引发踩踏",
+              "宏观经济与政策风险未纳入考量"
+            ],
+            "requiredChecks": [
+              "最新财报与盈利预测核查",
+              "反垄断与监管政策更新",
+              "行业资金流对比确认是否为板块共性",
+              "宏观经济指标对可选消费与科技支出的影响评估"
+            ]
+          },
+          "portfolioManagerDecision": {
+            "stance": "watch",
+            "confidence": 0.3,
+            "rationale": "期权市场表现出极端看涨倾向，但缺少基本面、新闻与行业数据支持，无法确认上涨的可持续性。需等待财报验证与催化剂明确后决策。"
+          }
+        },
+        "dataQuality": {
+          "verdict": "partial",
+          "issues": [
+            "仅包含富途期权资金流数据，无财务报表、新闻或行业比较",
+            "无法获知公司当前估值与增长预期",
+            "缺乏市场主线与板块资金流验证"
+          ]
+        },
+        "marketMainline": {
+          "verdict": "possible",
+          "confidence": 0.7,
+          "reason": "AMZN为大型科技股，与AI、云计算主题高度相关，期权资金流显示机构集中布局，可能代表对该主题的长期信心。但缺乏板块内其他个股对比。",
+          "evidence": [
+            "LEAP看涨期权资金流入巨大，与宏观科技主题吻合",
+            "2027年到期合约活跃，暗示对中长期产业趋势的押注"
+          ]
+        },
+        "liquidity": {
+          "verdict": "sufficient",
+          "reason": "股票与期权成交量巨大，期权总成交916,797张，成交额超11.6亿美元，完全满足研究需求。",
+          "optionFlowEvidence": [
+            "个股期权成交量497,300张，成交额11.64亿美元",
+            "LEAP看涨成交量431,088张，权利金11.86亿美元",
+            "买卖价差较窄，流动性良好"
+          ],
+          "stockLiquidityEvidence": [
+            "AMZN为标普500权重股，日均股票成交额通常达数十亿美元"
+          ]
+        },
+        "valuationExpectation": {
+          "verdict": "unknown",
+          "reason": "未提供任何财务数据，无法判断当前估值处于何种水平，也无法评估市场预期与实际情况的偏差。",
+          "whatMarketMayBePricing": [
+            "云计算服务（AWS）持续双位数增长",
+            "人工智能与广告业务带来利润增量",
+            "零售业务利润率改善"
+          ],
+          "missingData": [
+            "市盈率、市销率等估值指标",
+            "未来收入与盈利增速预测",
+            "资本支出与自由现金流趋势"
+          ]
+        },
+        "industryResearch": {
+          "level": "medium",
+          "industryPosition": "全球电商与云计算双龙头",
+          "upstream": [
+            "物流与仓储服务商",
+            "服务器硬件与半导体",
+            "能源与数据中心基础设施"
+          ],
+          "downstream": [
+            "全球消费者",
+            "中小型企业与大型企业（云服务）",
+            "广告客户"
+          ],
+          "competitors": [
+            "微软（Azure）",
+            "谷歌（Google Cloud）",
+            "沃尔玛（零售）",
+            "阿里巴巴（国际电商与云计算）"
+          ],
+          "keyQuestions": [
+            "AWS增速是否持续领先微软Azure？",
+            "人工智能投入能否转化为实质利润？",
+            "反垄断调查是否影响运营模式？"
+          ]
+        },
+        "optionFlowRead": {
+          "summary": "期权市场呈现极度看涨资金流，2027年1月到期的虚值与平值看涨期权成交量巨大，看跌期权交投清淡，CP ratio极高，反映机构大规模布局上行。",
+          "leapInterpretation": "长期期权资金流显示资金预期AMZN在2027年前仍处上升趋势，可能基于AI与云计算持续增长预期。但深度虚值看涨期权存在投机成分，需注意。",
+          "abnormalEvidence": [
+            "2027年1月275C成交量200,706张，持仓207,086张，权利金5.4亿美金",
+            "2027年1月300C成交量102,777张",
+            "call/put比4.36，LEAP call/put比27.57"
+          ],
+          "counterEvidence": [
+            "部分虚值看涨期权成交量可能来自散户或策略性卖出",
+            "看跌期权持仓集中在低位，可能在布局保护，并非完全看空"
+          ]
+        },
+        "stockTradePlan": {
+          "stance": "watch",
+          "buyConditions": [
+            "最新季报显示收入与EPS超预期，且云业务加速增长",
+            "公司发布积极的下季度或年度指引",
+            "股价放量突破关键技术阻力位"
+          ],
+          "addConditions": [
+            "基本面持续向好，期权资金流保持看涨结构",
+            "行业政策利好或竞争对手动态证实AMZN优势"
+          ],
+          "sellOrDowngradeConditions": [
+            "基本面恶化，如云业务增速显著放缓或利润率下滑",
+            "期权资金流出现逆转，看跌期权大规模涌入",
+            "宏观经济或行业政策出现重大利空"
+          ],
+          "invalidation": "若未来财务数据与市场乐观预期形成重大落差，或云计算领域出现颠覆性竞争者。"
+        },
+        "risks": [
+          "基本面数据缺失，无法判断估值合理性",
+          "期权资金流可能为对冲或波动率策略，并非纯方向性看涨",
+          "宏观经济下行可能拖累消费与云服务支出",
+          "反垄断与监管政策存在不确定性"
+        ],
+        "researchSources": [],
+        "missingData": [
+          "最新季度财报数据",
+          "分析师盈利预测与评级",
+          "公司近期新闻与催化剂",
+          "行业板块资金流对比"
+        ],
+        "nextResearchTasks": [
+          "获取AMZN最新季报及未来业绩展望",
+          "对比微软Azure、谷歌云等竞品增速",
+          "跟踪反垄断政策动态与公司回应",
+          "分析宏观经济对可选消费与云计算支出的影响"
+        ]
+      },
+      "premarketSnapshot": {
+        "ticker": "AMZN",
+        "code": "US.AMZN",
+        "name": "亚马逊",
+        "session": "premarket",
+        "marketState": "PRE_MARKET_BEGIN",
+        "lastPrice": 257.5,
+        "prevClose": 270.64,
+        "change": -13.139999999999986,
+        "changeRate": -1.439,
+        "volume": 278214.0,
+        "turnover": 71768861.287,
+        "quoteTime": "2026-06-02 08:01:42.460",
+        "rawAvailableFields": [
+          "after_change_rate",
+          "after_change_val",
+          "after_turnover",
+          "after_volume",
+          "circular_market_val",
+          "close_price_5min",
+          "future_last_settle_price",
+          "future_last_trade_time",
+          "future_position_change",
+          "last_price",
+          "option_premium",
+          "overnight_change_rate",
+          "overnight_change_val",
+          "overnight_turnover",
+          "overnight_volume",
+          "pre_amplitude",
+          "pre_change_rate",
+          "pre_change_val",
+          "pre_high_price",
+          "pre_low_price",
+          "pre_price",
+          "pre_turnover",
+          "pre_volume",
+          "prev_close_price",
+          "price_spread",
+          "short_available_volume",
+          "total_market_val",
+          "trust_premium",
+          "turnover",
+          "turnover_rate",
+          "volume",
+          "volume_ratio",
+          "wrt_premium"
+        ],
+        "capturedAt": "2026-06-02T12:01:49.255593+00:00",
+        "source": "futu"
+      }
     },
     {
       "ticker": "NOK",
@@ -9491,7 +9734,257 @@
         }
       ],
       "qualifiedByLeapThreshold": true,
-      "leapThresholdReason": "pass"
+      "leapThresholdReason": "pass",
+      "aiAnalysis": {
+        "executiveSummary": "诺基亚（NOK）期权市场出现显著的看涨资金流入，短期和长期看涨期权成交及持仓均高度活跃，C/P比高达5.67，LEAP看涨期权持仓远超看跌。然而，缺乏基本面、新闻和行业数据支撑，无法确认是否为独立资金行为或市场主题驱动。建议以观察为主，等待更多信息确认。",
+        "tradingAgentsReview": {
+          "fundamentalsAnalyst": {
+            "thesis": "暂无基本面数据可供分析，无法评估公司质量、财务健康或估值。",
+            "evidence": [],
+            "unknowns": [
+              "缺少最新财报数据（营收、利润、现金流）",
+              "缺乏资产负债表和负债水平",
+              "未提供行业地位和竞争分析",
+              "估值指标（PE、PB、PS等）未知"
+            ]
+          },
+          "sentimentNewsAnalyst": {
+            "thesis": "无相关新闻或市场情绪数据，无法判断是否存在催化剂。期权资金流动本身可能暗示市场乐观情绪，但缺乏新闻确认。",
+            "evidence": [
+              "期权市场C/P比5.67，显著看涨",
+              "LEAP call OI远大于put"
+            ],
+            "unknowns": [
+              "近期公司公告或行业新闻",
+              "分析师评级变化",
+              "社交媒体情绪",
+              "是否有重大产品发布或合作消息"
+            ]
+          },
+          "technicalFlowAnalyst": {
+            "thesis": "期权成交量及持仓结构显示强烈的看涨倾向，短期合约（尤其是6月5日和6月18日17/16 call）放量，同时远期LEAP call（如2027年1月15日20call）持仓巨大，表明市场存在中长期看涨押注。但短期合约可能由事件驱动，需注意到期时间风险。",
+            "nearTermContractRead": "6月5日17call成交量35527，OI 18634；6月5日16call成交量31137，OI 15289。短期价外看涨期权交易活跃，可能押注近期股价上行。",
+            "leapContractRead": "LEAP中最热合约为2027年1月15日20call，成交量17214，OI 117591，溢价约581万，显示大资金中长期看好。其他LEAP如30call、25call也有显著持仓。整体LEAP call OI 1,172,799远高于put OI。",
+            "evidence": [
+              "C/P比率5.67，call成交量/put成交量极端",
+              "LEAP call OI是put OI的9倍以上",
+              "最大LEAP call OI集中在20-30价位，部分深度价内（15call）"
+            ],
+            "counterEvidence": [
+              "部分高价call如30call也有交易，可能为投机",
+              "LEAP put成交量虽小但存在，如15put有3358成交量"
+            ]
+          },
+          "bullResearcher": {
+            "thesis": "强烈看涨：期权市场资金流动表现出极度看涨倾向，C/P比率高，LEAP call积累巨大持仓，表明聪明资金预期股价未来有显著上升空间。当前股价（约16.75？未提供，但从期权价格可推断股价大约在16.5-17之间）可能被低估，资金押注突破20甚至更高。",
+            "strongestEvidence": [
+              "LEAP call OI是put OI的9.13倍",
+              "顶级LEAP合约20call OI高达117,591，对应溢价约581万",
+              "短期call也大幅放量，表明市场共识看涨"
+            ]
+          },
+          "bearResearcher": {
+            "thesis": "看涨情绪可能过于一致，需警惕风险：期权资金流入可能为诱导性行为，或已过度拥挤。缺乏基本面支撑，股价可能受消息面影响大幅波动。此外，大量短期call可能仅是投机，到期后压力释放。",
+            "strongestRisks": [
+              "无基本面数据，无法验证估值合理性",
+              "期权C/P比极高，可能存在反转风险",
+              "LEAP call持仓虽大，但若股价不及预期，时间价值损耗可能沉重",
+              "公司面临行业竞争和宏观经济风险"
+            ]
+          },
+          "riskManager": {
+            "riskLevel": "high",
+            "reasons": [
+              "缺乏基本面信息，无法评估下行风险",
+              "期权资金单一指标风险高",
+              "行业不确定性",
+              "流动性风险可能（期权流动性好，但股票流动性未知）",
+              "事件风险未知"
+            ],
+            "requiredChecks": [
+              "获取最新财报和估值数据",
+              "确认公司近期公告和行业动态",
+              "评估大盘和市场主题风险",
+              "检查股票本身交易量和流动性"
+            ]
+          },
+          "portfolioManagerDecision": {
+            "stance": "watch",
+            "confidence": 0.3,
+            "rationale": "期权资金流显示强烈看涨，但缺乏基本面、新闻和行业背景支持，无法构建完整投资逻辑。需等待更多数据确认。若基本面健康且配合市场主线，可考虑买入；否则应避免。当前建议观察。"
+          }
+        },
+        "dataQuality": {
+          "verdict": "partial",
+          "issues": [
+            "仅提供期权成交和持仓数据，无基本面、新闻、行业分析",
+            "未提供股票当前价格，由期权价格推断约为16-17",
+            "缺乏估值和财务指标"
+          ]
+        },
+        "marketMainline": {
+          "verdict": "unknown",
+          "confidence": 0.1,
+          "reason": "未提供市场主题和行业信息。诺基亚属于通信设备行业，可能与5G、6G或基础设施相关，但无法确认是否为当前主线。",
+          "evidence": []
+        },
+        "liquidity": {
+          "verdict": "average",
+          "reason": "股票期权交易活跃，成交量和成交额较大，LEAP流动性充足，但未提供股票自身交易量和日均成交额。期权流动性可接受，但需确认股票流动性。",
+          "optionFlowEvidence": [
+            "股票期权总成交量791,202",
+            "期权总成交额约3,847万",
+            "LEAP call成交量98,793，put成交量10,820"
+          ],
+          "stockLiquidityEvidence": [
+            "未提供股票交易量数据，无法直接评估"
+          ]
+        },
+        "valuationExpectation": {
+          "verdict": "unknown",
+          "reason": "无财务数据，无法计算估值。市场可能根据期权资金认为股价有上行空间，但缺乏每股收益、预期等。",
+          "whatMarketMayBePricing": [
+            "可能定价为5G基础设施增长或转型预期",
+            "期权资金暗示股价突破20甚至更高的预期"
+          ],
+          "missingData": [
+            "当前股价",
+            "预期市盈率、市净率",
+            "分析师目标价",
+            "行业平均估值"
+          ]
+        },
+        "industryResearch": {
+          "level": "low",
+          "industryPosition": "诺基亚为全球通信设备供应商，在无线网络和固定网络领域有竞争地位，但近年面临中国竞争对手压力。具体市场份额未知。",
+          "upstream": [
+            "半导体芯片",
+            "电子元件",
+            "软件供应商"
+          ],
+          "downstream": [
+            "电信运营商（如AT&T, Verizon, T-Mobile等）",
+            "企业网络客户"
+          ],
+          "competitors": [
+            "爱立信（Ericsson）",
+            "华为（Huawei）",
+            "三星网络",
+            "中兴通讯（ZTE）"
+          ],
+          "keyQuestions": [
+            "诺基亚在5G/6G设备市场的当前份额和竞争力如何？",
+            "近期是否赢得重大运营商合同？",
+            "公司重组和成本削减进展如何？",
+            "地缘政治风险（如华为替代）对诺基亚的影响？"
+          ]
+        },
+        "optionFlowRead": {
+          "summary": "期权市场呈现极度看涨结构，整体CP比5.67，LEAP call OI是put OI的9.13倍，资金集中押注中长期上涨。短期合约到期前存在事件驱动可能。",
+          "leapInterpretation": "长期看涨期权积累了大量持仓，特别是2027年1月20call（OI 11.7万张）和25call（OI 9.1万张），显示大资金对股价在未来一年内上涨至20以上抱有较强信心。总LEAP premium达3847万，资金流入规模可观。",
+          "abnormalEvidence": [
+            "LEAP call OI极端集中于价外20-30区间",
+            "短期3-18天到期合约成交量巨大，疑似事件前夕布局",
+            "PUT成交量相对极低，市场几乎无视下行风险"
+          ],
+          "counterEvidence": [
+            "LEAP put也有一定成交量（如15put），但规模较小",
+            "部分远期深度价内call（15call）成交量不大，暗示资金更偏好价外杠杆"
+          ]
+        },
+        "stockTradePlan": {
+          "stance": "watch",
+          "buyConditions": [
+            "基本面确认改善：营收增长、利润率提升",
+            "出现积极新闻催化剂（如重大合同、技术突破）",
+            "股价放量突破近期阻力位（如17-18区间）并确认支撑",
+            "市场主线转向通信设备/5G，板块集体走强"
+          ],
+          "addConditions": [
+            "已建立初始仓位后，若后续财报持续超预期且期权资金继续看涨，可加仓"
+          ],
+          "sellOrDowngradeConditions": [
+            "基本面恶化或未达预期",
+            "期权资金出现逆转（CP比快速下降，LEAP call持仓大幅减少）",
+            "股价跌破关键支撑位（如15）",
+            "大盘或行业系统性风险"
+          ],
+          "invalidation": "若公司财报显示持续亏损或失去重要客户，或期权资金被证实为误导性交易，逻辑失效。"
+        },
+        "risks": [
+          "数据不完整风险",
+          "期权资金可能为对冲而非方向性押注",
+          "行业竞争风险",
+          "宏观经济风险"
+        ],
+        "researchSources": [],
+        "missingData": [
+          "最近季度财报",
+          "当前股价",
+          "分析师评级",
+          "行业新闻",
+          "公司公告",
+          "股票交易量数据"
+        ],
+        "nextResearchTasks": [
+          "获取NOK最新10-Q/10-K文件",
+          "查看近期新闻和SEC文件",
+          "对比爱立信等竞争对手估值和资金流量",
+          "确认股票日均交易量和流动性",
+          "调查是否有即将到来的产品发布或事件"
+        ]
+      },
+      "premarketSnapshot": {
+        "ticker": "NOK",
+        "code": "US.NOK",
+        "name": "诺基亚",
+        "session": "premarket",
+        "marketState": "PRE_MARKET_BEGIN",
+        "lastPrice": 16.7087,
+        "prevClose": 14.84,
+        "change": 1.8687000000000005,
+        "changeRate": 2.822,
+        "volume": 6010623.0,
+        "turnover": 101106847.071,
+        "quoteTime": "2026-06-02 08:01:48.850",
+        "rawAvailableFields": [
+          "after_change_rate",
+          "after_change_val",
+          "after_turnover",
+          "after_volume",
+          "circular_market_val",
+          "close_price_5min",
+          "future_last_settle_price",
+          "future_last_trade_time",
+          "future_position_change",
+          "last_price",
+          "option_premium",
+          "overnight_change_rate",
+          "overnight_change_val",
+          "overnight_turnover",
+          "overnight_volume",
+          "pre_amplitude",
+          "pre_change_rate",
+          "pre_change_val",
+          "pre_high_price",
+          "pre_low_price",
+          "pre_price",
+          "pre_turnover",
+          "pre_volume",
+          "prev_close_price",
+          "price_spread",
+          "short_available_volume",
+          "total_market_val",
+          "trust_premium",
+          "turnover",
+          "turnover_rate",
+          "volume",
+          "volume_ratio",
+          "wrt_premium"
+        ],
+        "capturedAt": "2026-06-02T12:01:49.255593+00:00",
+        "source": "futu"
+      }
     },
     {
       "ticker": "NVDA",
@@ -14232,7 +14725,251 @@
         }
       ],
       "qualifiedByLeapThreshold": true,
-      "leapThresholdReason": "pass"
+      "leapThresholdReason": "pass",
+      "aiAnalysis": {
+        "executiveSummary": "NVDA期权数据显示强烈看涨情绪，总成交量和LEAP call持仓极高，CP比率接近3，暗示市场对长期上涨抱有信心。但缺乏基本面、新闻和市场主线验证，无法确定当前估值是否合理。建议观察，等待基本面催化剂或技术确认。",
+        "tradingAgentsReview": {
+          "fundamentalsAnalyst": {
+            "thesis": "无法评估基本面，因为未提供财务数据。",
+            "evidence": [],
+            "unknowns": [
+              "营收、利润、自由现金流等关键财务指标",
+              "估值倍数（PE、PS等）与历史及行业比较",
+              "新产品周期、毛利率趋势及研发投入",
+              "债务水平与现金流健康状况"
+            ]
+          },
+          "sentimentNewsAnalyst": {
+            "thesis": "期权市场情绪极度看涨，call成交量和持仓量显著高于put，但缺少新闻事件佐证，无法判断是否有同步的正面催化剂。",
+            "evidence": [
+              "Futu期权数据显示总成交量2,840,674，其中call 2,117,511，put 723,163，CP比率2.93",
+              "LEAP call OI高达3,524,391（例如2027年1月160 call OI 109,309），长期资金建仓积极"
+            ],
+            "unknowns": [
+              "近期公司相关新闻、分析师评级调整、行业政策变化",
+              "市场叙事：AI芯片需求预期、竞争格局等",
+              "财报发布日期及预期，产品发布活动"
+            ]
+          },
+          "technicalFlowAnalyst": {
+            "thesis": "近月合约成交量集中在6月5日和3日的220-230 call，显示短期投机活跃，IV偏高暗示事件预期。LEAP合约中call持仓大幅领先，实值和虚值call均有大量资金流入，整体偏多，但部分虚值call可能为彩票交易，需警惕。",
+            "nearTermContractRead": "近月合约中，6月5日225 call成交量102,093，230 call 90,760，6月3日类似；IV在50%-62%之间，表明预期短期有较大波动。高成交量的call多为虚值一档，delta在0.33-0.67，可能是方向性投机或组合策略的一部分。",
+            "leapContractRead": "LEAP call成交量（100,575）约为put（52,545）的1.9倍，CP比率1.91。深度实值call（如2027年1月160 call OI 109,309）与深度虚值call（如12月18日400 call成交量4572）同时活跃，显示有资金将期权作为股票替代或进行极度杠杆投机。大量实值call的高OI表明机构可能利用期权代替持有股票以节省资金。虚值call活跃则反映市场对大幅上涨的预期。",
+            "evidence": [
+              "总call/put成交量比2.93，LEAP CP比1.91，均由call主导",
+              "LEAP call OI巨大，2027年1月160 call OI 109,309，200 call OI 85,477",
+              "近月call IV较高（约50-62%），说明市场定价了近期重大事件",
+              "LEAP premium flow达3.33亿，资金明显流入"
+            ],
+            "counterEvidence": [
+              "LEAP put也有一定成交量，例如2028年1月180 put成交量2,592，OI 13,764，显示存在对冲需求",
+              "深度虚值call（如400 call）delta仅0.084，投机性强，可能不代表理性预期"
+            ]
+          },
+          "bullResearcher": {
+            "thesis": "期权资本投票强烈看涨，长期call持仓积累显著，市场对NVDA未来1-2年的大幅增长抱有高度信心，这与AI芯片行业的领先地位相符。",
+            "strongestEvidence": [
+              "LEAP call OI 3,524,391远超put，且深度实值call（delta 0.87）大量存在，表明资金利用期权替代股票增加杠杆",
+              "LEAP call成交量是put的1.91倍，资金持续流入看涨方向",
+              "近月call成交活跃，市场情绪高涨，短期可能也有催化剂"
+            ]
+          },
+          "bearResearcher": {
+            "thesis": "期权数据可能过度乐观，高IV和虚值call投机暗示市场情绪达到极端，缺乏基本面支撑和数据验证，可能形成价格泡沫，下行风险加剧。",
+            "strongestRisks": [
+              "近月IV高达50%以上，期权溢价昂贵，一旦波动回落或股价停滞，买方将损失时间价值",
+              "LEAP虚值call如400、360等成交量高但delta极低，类似彩票交易，反映部分参与者不理性",
+              "虽有大量看涨，但put持仓亦不小，如2028年1月180 put OI 13764，有资金在防范尾部风险",
+              "缺少基本面数据，无法判断当前股价是否被高估"
+            ]
+          },
+          "riskManager": {
+            "riskLevel": "high",
+            "reasons": [
+              "期权投机氛围浓重，高IV和虚值call活跃可能引发踩踏",
+              "缺乏基本面信息，无法评估估值风险",
+              "股票和期权流动性充足，但事件风险未知（财报、产品发布等）",
+              "高仓位和情绪可能导致大幅回撤"
+            ],
+            "requiredChecks": [
+              "获取并分析最新财报和估值",
+              "监控近期期权异动：有无异常大单，IV变动",
+              "核查新闻日历：财报、股东大会、产品发布",
+              "市场情绪指标：恐慌指数、板块轮动"
+            ]
+          },
+          "portfolioManagerDecision": {
+            "stance": "watch",
+            "confidence": 0.4,
+            "rationale": "期权流虽强烈看涨，但数据单一，无法形成交易决策。需等待基本面、新闻和市场主线确认后，再结合价格行为决定。"
+          }
+        },
+        "dataQuality": {
+          "verdict": "partial",
+          "issues": [
+            "仅有期权数据，缺少财务报表、新闻、行业报告等核心信息",
+            "无法验证持仓、估值与市场情绪的一致性"
+          ]
+        },
+        "marketMainline": {
+          "verdict": "unknown",
+          "confidence": 0,
+          "reason": "未提供当前市场主线信息，无法判断NVDA是否属于热门板块或轮动方向。",
+          "evidence": []
+        },
+        "liquidity": {
+          "verdict": "sufficient",
+          "reason": "股票期权日成交量超过160万张，成交额超5.3亿美元，流动性充裕；LEAP成交量也达到10万张以上，主要合约价差适中，具备研究价值。",
+          "optionFlowEvidence": [
+            "总期权成交量2,840,674，其中call 2,117,511，put 723,163",
+            "LEAP call成交量100,575，put 52,545，CP比1.91",
+            "LEAP call OI 3,524,391，put OI虽未列总量但明显较低"
+          ],
+          "stockLiquidityEvidence": [
+            "未提供股票成交量数据，但大型科技股通常流动性充足"
+          ]
+        },
+        "valuationExpectation": {
+          "verdict": "unknown",
+          "reason": "缺少市盈率、增长预期等关键估值指标，无法判断市场定价是否合理。期权高IV暗示市场预期高波动，但方向未知。",
+          "whatMarketMayBePricing": [
+            "AI芯片需求持续爆发，公司可能保持高增长",
+            "即将到来的产品周期或财报可能带来利好"
+          ],
+          "missingData": [
+            "当前股价、PE、PS、PEG等估值倍数",
+            "未来几个季度盈利预期及长期增长率",
+            "行业比较：与AMD、英特尔等的估值差异"
+          ]
+        },
+        "industryResearch": {
+          "level": "unknown",
+          "industryPosition": "NVDA是全球GPU和AI计算龙头，但缺乏具体数据支持。",
+          "upstream": [
+            "台积电等晶圆代工",
+            "三星/Hynix内存"
+          ],
+          "downstream": [
+            "数据中心（云服务商）",
+            "游戏产业",
+            "自动驾驶"
+          ],
+          "competitors": [
+            "AMD",
+            "英特尔",
+            "自研芯片的科技巨头"
+          ],
+          "keyQuestions": [
+            "AI芯片需求增速是否可持续？",
+            "竞争对手是否在侵蚀市场份额？",
+            "供应链瓶颈是否缓解？",
+            "新架构产品市场接受度如何？"
+          ]
+        },
+        "optionFlowRead": {
+          "summary": "期权总成交量284万张，CP比2.93，极度偏多。近月合约投机活跃，LEAP call持仓积累巨大，显示市场对长期上涨信心强烈。但虚值call成交量异常，需警惕情绪过热。",
+          "leapInterpretation": "LEAP call持仓显著大于put，实值call（如2027年1月160 call）被大量持有，可能作为替代股票的长期工具或机构建仓。虚值call（如400 call）成交活跃但delta极低，更多是投机性‘彩票’。整体LEAN资本流偏向看涨，但存在尾部对冲迹象。",
+          "abnormalEvidence": [
+            "2027年1月160 call OI高达109,309，远超其他合约",
+            "2026年12月400 call delta仅0.084但成交量4,572，投机性明显",
+            "总call成交量是put的近3倍，情绪极端"
+          ],
+          "counterEvidence": [
+            "LEAP put如2028年1月180 put OI 13,764，显示有资金对冲暴跌风险",
+            "近月IV较高，期权价格昂贵，买方获胜概率降低"
+          ]
+        },
+        "stockTradePlan": {
+          "stance": "watch",
+          "buyConditions": [
+            "股价回调至关键技术支撑且伴随基本面催化剂确认",
+            "财报超预期或重大产品发布驱动",
+            "期权流出现更健康的call/put结构，虚值call回落，实值call持续增加"
+          ],
+          "addConditions": [
+            "已有仓位且基本面验证增长持续，可在回调或突破时加仓",
+            "LEAP call OI进一步增加且集中于实值，表明机构加大押注"
+          ],
+          "sellOrDowngradeConditions": [
+            "基本面恶化，盈利不及预期",
+            "期权流逆转：put成交量暴增，CP比跌破1",
+            "技术面破位，如跌破长期均线"
+          ],
+          "invalidation": "若后续发现数据缺失导致分析偏差，或市场环境突变（如系统性风险），此计划需重新评估。"
+        },
+        "risks": [
+          "期权情绪过度亢奋，可能形成泡沫，导致股价剧烈回调",
+          "缺少基本面数据，无法验证估值合理性，存在估值风险",
+          "财报或新产品发布不及预期，可能引发获利了结",
+          "高IV和虚值call投机可能导致期权买方损失时间价值，影响情绪",
+          "行业竞争加剧或AI需求放缓等长期风险未被当前价格体现"
+        ],
+        "researchSources": [],
+        "missingData": [
+          "NVDA最新财务数据（收入、利润、现金流）",
+          "分析师一致预期及估值",
+          "近期新闻、财报电话会记录、行业报告",
+          "技术分析图表"
+        ],
+        "nextResearchTasks": [
+          "收集NVDA最近季度财报和SEC文件",
+          "查阅主要券商研报和目标价",
+          "监控期权异常大单和IV期限结构",
+          "分析AI芯片行业动态和竞争格局",
+          "等待股价出现明确技术信号或基本面事件后重新评估"
+        ]
+      },
+      "premarketSnapshot": {
+        "ticker": "NVDA",
+        "code": "US.NVDA",
+        "name": "英伟达",
+        "session": "premarket",
+        "marketState": "PRE_MARKET_BEGIN",
+        "lastPrice": 227.08,
+        "prevClose": 211.14,
+        "change": 15.940000000000026,
+        "changeRate": 1.212,
+        "volume": 2904510.0,
+        "turnover": 660252377.089,
+        "quoteTime": "2026-06-02 08:01:48.508",
+        "rawAvailableFields": [
+          "after_change_rate",
+          "after_change_val",
+          "after_turnover",
+          "after_volume",
+          "circular_market_val",
+          "close_price_5min",
+          "future_last_settle_price",
+          "future_last_trade_time",
+          "future_position_change",
+          "last_price",
+          "option_premium",
+          "overnight_change_rate",
+          "overnight_change_val",
+          "overnight_turnover",
+          "overnight_volume",
+          "pre_amplitude",
+          "pre_change_rate",
+          "pre_change_val",
+          "pre_high_price",
+          "pre_low_price",
+          "pre_price",
+          "pre_turnover",
+          "pre_volume",
+          "prev_close_price",
+          "price_spread",
+          "short_available_volume",
+          "total_market_val",
+          "trust_premium",
+          "turnover",
+          "turnover_rate",
+          "volume",
+          "volume_ratio",
+          "wrt_premium"
+        ],
+        "capturedAt": "2026-06-02T12:01:49.255593+00:00",
+        "source": "futu"
+      }
     },
     {
       "ticker": "TSLA",
@@ -18973,7 +19710,241 @@
         }
       ],
       "qualifiedByLeapThreshold": true,
-      "leapThresholdReason": "pass"
+      "leapThresholdReason": "pass",
+      "aiAnalysis": {
+        "executiveSummary": "基于富途期权数据的分析显示，TSLA期权市场呈现高度投机性看涨情绪，短期深度虚值看涨期权成交量巨大，长期LEAP看涨期权也有显著资金流入，但缺乏基本面及新闻数据支持，整体评估为'关注'。",
+        "tradingAgentsReview": {
+          "fundamentalsAnalyst": {
+            "thesis": "缺乏财务数据，无法评估公司质量，当前未知基本面状况。",
+            "evidence": [],
+            "unknowns": [
+              "季度营收与利润增长趋势",
+              "毛利率与运营利润率",
+              "自由现金流及债务水平",
+              "汽车交付量及产能数据",
+              "新产品及服务收入贡献度"
+            ]
+          },
+          "sentimentNewsAnalyst": {
+            "thesis": "暂无新闻及舆情数据，无法评估市场叙事和催化剂。",
+            "evidence": [],
+            "unknowns": [
+              "近期公司公告或管理层评论",
+              "分析师评级调整",
+              "社交媒体情绪",
+              "宏观及行业新闻影响"
+            ]
+          },
+          "technicalFlowAnalyst": {
+            "thesis": "期权市场显示强烈的看涨资金流向。短期合约中，虚值看涨期权（如900C）成交量极大，具有投机性质；同时LEAP看涨期权（如2027年1月600C）成交活跃且持仓量高，表明有资金布局长期上涨。看跌期权相对弱势。整体流动偏多。",
+            "nearTermContractRead": "近期合约（6月5日到期）中，深度虚值900C成交量高达77477张，但价格极低（0.01），可能为廉价博彩或关仓行为；420C、440C、450C等略微虚值期权同样成交火爆，反映出短期看涨投机。",
+            "leapContractRead": "长期LEAP中，2027年1月600C成交量3702张，持仓量14679张，权利金流入超800万；另有大持仓集中在960C（10.9万张）等极高行权价，表明部分资金押注长期大幅上涨。整体LEAP看涨/看跌比2.12，偏多。",
+            "evidence": [
+              "期权总成交量达149万，看涨/看跌比1.97",
+              "短期深度虚值看涨期权成交量巨大",
+              "LEAP权利金流达1.27亿，看涨占比高"
+            ],
+            "counterEvidence": [
+              "看跌期权也有一定流动性，尤其深度虚值看跌期权有成交，但规模小于看涨",
+              "CP比率未超过2.5，并非极端失衡"
+            ]
+          },
+          "bullResearcher": {
+            "thesis": "多头观点：期权市场的大规模看涨流向表明市场对TSLA未来有积极预期，尤其在长期LEAP上建立大量看涨头寸，可能基于对电动汽车市场扩张、能源业务增长或FSD技术突破的信念。短期投机性买盘也可能推动股价。",
+            "strongestEvidence": [
+              "LEAP看涨持仓庞大，2027年1月960C持仓超10万张",
+              "总期权看涨/看跌比1.97，短期与长期均偏向看涨",
+              "LEAP权利金流入超1.26亿美元，显示出真金白银的看涨押注"
+            ]
+          },
+          "bearResearcher": {
+            "thesis": "空头观点：缺乏基本面数据，巨大的期权投机可能成为反向指标。深度虚值看涨期权成交量过大，显示出市场狂热情绪。若公司业绩不及预期或市场情绪逆转，可能引发踩踏。此外，看跌期权也存在一定持仓，尤其是长期看跌期权，暗示有资金在下方对冲或看空。",
+            "strongestRisks": [
+              "短期900C等深度虚值期权成交量巨大，投机性极强，可能预示顶部",
+              "缺乏营收和交付量等基本面支持，上涨可能只是资金推动",
+              "长期看跌期权（如2028年1月300P等）有成交，情绪并非一致看多"
+            ]
+          },
+          "riskManager": {
+            "riskLevel": "medium",
+            "reasons": [
+              "期权市场投机性高，短期虚值合约活跃",
+              "缺乏基本面数据，无法评估内在价值",
+              "若股价波动，高杠杆头寸可能导致踩踏",
+              "行业竞争加剧及政策变化风险未知"
+            ],
+            "requiredChecks": [
+              "审查TSLA最新季度财报及交付量",
+              "关注宏观经济与利率环境",
+              "确认大型资金流向背后的逻辑（如大股东买卖）"
+            ]
+          },
+          "portfolioManagerDecision": {
+            "stance": "watch",
+            "confidence": 0.4,
+            "rationale": "期权流动呈现看涨倾向，但无基本面支撑，且短期投机氛围浓厚。当前仅适合观察，需等待明确的财报信号或行业催化剂后再做决策。建议列入观察清单。"
+          }
+        },
+        "dataQuality": {
+          "verdict": "partial",
+          "issues": [
+            "缺少财务报表数据",
+            "缺少新闻舆情数据",
+            "缺少行业对比和估值数据"
+          ]
+        },
+        "marketMainline": {
+          "verdict": "unknown",
+          "confidence": 0,
+          "reason": "未提供市场整体走向或板块轮动数据，无法判断TSLA是否纳入当前主线。TSLA属于汽车制造与科技板块，需结合大盘及新能源车行业表现来判断。",
+          "evidence": []
+        },
+        "liquidity": {
+          "verdict": "sufficient",
+          "reason": "期权成交量巨大，单日总成交量近150万张，显示期权流动性充裕；股票流动性需查看股票交易量，默认为大盘股流动性充足。",
+          "optionFlowEvidence": [
+            "总成交量1493922张，看涨990951张",
+            "LEAP成交量27364张，权利金流达1.27亿"
+          ],
+          "stockLiquidityEvidence": [
+            "假设TSLA股票日均成交量极大，流动性充足（未提供股票具体数据）"
+          ]
+        },
+        "valuationExpectation": {
+          "verdict": "unknown",
+          "reason": "缺乏市盈率、市销率、盈利预期等数据，无法判断当前定价是否合理。期权市场隐含波动率较高，可能定价了未来大幅波动。",
+          "whatMarketMayBePricing": [
+            "期权市场中长期看涨结构可能定价了FSD技术突破或强劲交付增长"
+          ],
+          "missingData": [
+            "当前股价与历史估值区间",
+            "2026年盈利预测与市场共识",
+            "部门营收构成与增长率"
+          ]
+        },
+        "industryResearch": {
+          "level": "low",
+          "industryPosition": "电动汽车及能源解决方案领导者，但具体数据未知",
+          "upstream": [
+            "电池供应商（如松下、LG、宁德时代）"
+          ],
+          "downstream": [
+            "消费者、企业车队、储能项目"
+          ],
+          "competitors": [
+            "比亚迪、蔚来、小鹏、传统车企如福特、通用"
+          ],
+          "keyQuestions": [
+            "特斯拉市场份额变化趋势？",
+            "FSD技术进展及监管批准状态？",
+            "Cybertruck等新车型产能与订单情况？",
+            "储能业务增速及利润率？",
+            "全球扩张策略进展（如中国、欧洲工厂）?"
+          ]
+        },
+        "optionFlowRead": {
+          "summary": "期权市场整体呈现强烈看涨情绪，短期投机性虚值看涨期权成交活跃，同时长期LEAP也有大量资金流入看涨期权，看跌期权相对弱势。但深度虚值看涨期权的高成交量也暗示了市场可能过于狂热。",
+          "leapInterpretation": "LEAP期权中，2027年1月600C作为最热门合约，成交量、持仓及权利金均高，显示有机构或大户布局中期看涨。极高行权价的960C持仓巨大，可能是长期看涨或结构化产品头寸。整体LEAP看涨持仓远大于看跌，偏多解读。",
+          "abnormalEvidence": [
+            "900C（6月5日到期）成交量7.7万张，远超正常水平，价格接近0，可能为大户平仓或日内投机",
+            "960C LEAP持仓超10万张，权利金庞大，值得注意"
+          ],
+          "counterEvidence": [
+            "部分长期看跌期权（如2028年1月300P）也有成交，表明并非完全单边看涨"
+          ]
+        },
+        "stockTradePlan": {
+          "stance": "watch",
+          "buyConditions": [
+            "公司公布超预期季度交付量或营收",
+            "出现重大技术突破或新业务合作公告",
+            "股价回调至技术支撑位且期权情绪仍偏多",
+            "获得分析师普遍上调目标价"
+          ],
+          "addConditions": [
+            "若已持有，在基本面确认改善后可考虑加仓"
+          ],
+          "sellOrDowngradeConditions": [
+            "若下季度财报不及预期，或出现交付量下滑",
+            "宏观环境恶化，利率上升影响成长股估值",
+            "期权市场中看涨情绪急剧退潮，CP比率骤降"
+          ],
+          "invalidation": "缺乏基本面数据，任何投资决策均需更多信息支撑。"
+        },
+        "risks": [
+          "投机性期权泡沫风险",
+          "基本面未知风险",
+          "宏观经济与利率风险",
+          "行业竞争加剧风险",
+          "数据质量风险（仅依赖期权数据）"
+        ],
+        "researchSources": [],
+        "missingData": [
+          "特斯拉2026年一季度财报及交付量",
+          "华尔街分析师最新评级与目标价",
+          "行业销售数据及市场份额",
+          "宏观经济指标（利率、消费者信心等）",
+          "公司官方新闻及管理层指引"
+        ],
+        "nextResearchTasks": [
+          "获取并分析TSLA最近季度财报",
+          "跟踪汽车交付月报与产量数据",
+          "研究FSD及能源业务进展",
+          "监控期权持仓变化，尤其是LEAP中的异常波动",
+          "比较同行业竞争对手的估值与市场情绪"
+        ]
+      },
+      "premarketSnapshot": {
+        "ticker": "TSLA",
+        "code": "US.TSLA",
+        "name": "特斯拉",
+        "session": "premarket",
+        "marketState": "PRE_MARKET_BEGIN",
+        "lastPrice": 417.5,
+        "prevClose": 435.79,
+        "change": -18.29000000000002,
+        "changeRate": 0.389,
+        "volume": 417525.0,
+        "turnover": 174031795.914,
+        "quoteTime": "2026-06-02 08:01:48.413",
+        "rawAvailableFields": [
+          "after_change_rate",
+          "after_change_val",
+          "after_turnover",
+          "after_volume",
+          "circular_market_val",
+          "close_price_5min",
+          "future_last_settle_price",
+          "future_last_trade_time",
+          "future_position_change",
+          "last_price",
+          "option_premium",
+          "overnight_change_rate",
+          "overnight_change_val",
+          "overnight_turnover",
+          "overnight_volume",
+          "pre_amplitude",
+          "pre_change_rate",
+          "pre_change_val",
+          "pre_high_price",
+          "pre_low_price",
+          "pre_price",
+          "pre_turnover",
+          "pre_volume",
+          "prev_close_price",
+          "price_spread",
+          "short_available_volume",
+          "total_market_val",
+          "trust_premium",
+          "turnover",
+          "turnover_rate",
+          "volume",
+          "volume_ratio",
+          "wrt_premium"
+        ],
+        "capturedAt": "2026-06-02T12:01:49.255593+00:00",
+        "source": "futu"
+      }
     },
     {
       "ticker": "SPCE",
@@ -23012,7 +23983,267 @@
         }
       ],
       "qualifiedByLeapThreshold": true,
-      "leapThresholdReason": "pass"
+      "leapThresholdReason": "pass",
+      "aiAnalysis": {
+        "executiveSummary": "SPCE期权流动呈现极度看涨特征，近月与远月看涨合约均获资金大量流入，总成交量与未平仓数据显示市场对上行有较强预期。但当前仅基于期权数据，缺乏基本面、新闻、行业及股票流动性信息，无法形成完整判断。建议在关键信息缺失下保持观望，待核心数据验证后重新评估。",
+        "tradingAgentsReview": {
+          "fundamentalsAnalyst": {
+            "thesis": "所提供数据中不含基本面信息，无法评估公司财务健康、盈利能力、估值或业务可持续性。",
+            "evidence": [],
+            "unknowns": [
+              "收入、毛利、净利趋势",
+              "现金流与现金消耗率",
+              "债务水平与偿债能力",
+              "商业运营进展（飞次、客户数）",
+              "估值指标（P/S、P/B、EV/EBITDA）",
+              "股权稀释历史"
+            ]
+          },
+          "sentimentNewsAnalyst": {
+            "thesis": "缺乏新闻与社交媒体数据，无法判断市场情绪、近期催化或负面消息。",
+            "evidence": [],
+            "unknowns": [
+              "最新分析师评级与目标价",
+              "近期重要公告（如试飞进展、合作）",
+              "监管动态",
+              "空头持仓比例",
+              "社交媒体热度与关键词趋势"
+            ]
+          },
+          "technicalFlowAnalyst": {
+            "thesis": "期权流动明显偏向看涨，近月合约爆量与高IV并行，远月LEAP看涨亦受追捧，反映投机性看涨预期较强，但需警惕天量近月合约可能为短期事件驱动或波动率交易。",
+            "nearTermContractRead": "近月（2026-06-18）6.00C成交高达42336张，未平仓38933张，IV达377.99%，11.00C成交37991张，8.00C成交30248张，均显示短线强烈看涨情绪，但极高IV暗示高成本与高波动风险。",
+            "leapContractRead": "LEAP（≥180天）看涨成交35579张，明显高于看跌16172张，LEAP CP比2.20。资金集中于2027-01-15到期的15.00C（成交9003张，未平仓21939，权利金约247万）和10.00C（成交4363张，未平仓19704），以及2028-01-21的7.00C等，表明中长期亦存看涨布局。但部分高行权价无未平仓合约，可能为日内交易，需观察持续性。",
+            "evidence": [
+              "总期权成交量581923，看涨占比64.8%，CP比1.84",
+              "LEAP看涨成交占比10.4%，超过阈值，LEAP CP比2.20",
+              "富途期权成交量排名：近月6C、11C、8C等巨量",
+              "LEAP权利金总流入约1299万，集中在中低行权价看涨"
+            ],
+            "counterEvidence": [
+              "近月5P成交27724张，显示亦有保护性对冲或看空需求",
+              "多个高行权价看涨未平仓为0，暗示短线投机而非建仓",
+              "极高IV可能吸引卖权策略，非纯看涨"
+            ]
+          },
+          "bullResearcher": {
+            "thesis": "期权资金流释放强烈看涨信号：近月巨量成交与高未平仓表明大量投机性买盘押注短期内股价突破，远月LEAP看涨加仓则暗示对中长期上行空间的预期。若公司后续有商业突破，期权市场已提前反应积极预期。",
+            "strongestEvidence": [
+              "近月6.00C成交量42336张，未平仓38933，权利金约1300万，为极显著看涨行为",
+              "LEAP CP比2.20，看涨未平仓总量达141091张",
+              "多个低价LEAP看涨（如5C、7C）保持高未平仓与成交量，表明持续建仓"
+            ]
+          },
+          "bearResearcher": {
+            "thesis": "期权看涨可能为波动率交易或卖权而非净多头；极高IV意味着期权价格昂贵，股价即使上涨亦可能无法覆盖时间损耗；公司基本面堪忧（未知但可推断高风险），历史股价大跌风险高；任何延迟或负面消息均可导致期权价值归零，多头需谨慎。",
+            "strongestRisks": [
+              "无基本面支撑：公司历史亏损严重，现金消耗极快，股权稀释风险高",
+              "高隐含波动率（近月IV>300%）使得期权的盈亏平衡点极高，对股价波动要求苛刻",
+              "大量近月合约可能为对冲/高频交易而非真看涨，需结合股价位置判断",
+              "太空旅游商业化进程不确定性大，监管与安全事故均为未知风险"
+            ]
+          },
+          "riskManager": {
+            "riskLevel": "high",
+            "reasons": [
+              "数据质量严重不足：仅依赖期权流动，完全缺失财务、新闻、股票基本面及流动性数据",
+              "期权流动性虽高，但不能代表底层股票流动性，可能无法以合理价格退出",
+              "事件风险：SPCE作为太空旅游企业高度依赖里程碑式进展，任何延误或事故将造成剧烈回调",
+              "估值风险：无数据可评估合理价值，投机氛围浓厚"
+            ],
+            "requiredChecks": [
+              "审查最新10-K/10-Q年度及季度报告",
+              "确认内部人交易与主要股东持仓变化",
+              "获取第三方评级（晨星、彭博）与分析报告",
+              "检查股票日成交均量及买卖价差以评估流动性"
+            ]
+          },
+          "portfolioManagerDecision": {
+            "stance": "unknown",
+            "confidence": 0.15,
+            "rationale": "当前仅有期权流动数据，显示投机性看涨，但缺少任何基本面验证，无法做出有理有据的买入或卖出决定。需要至少完成财务状况、新闻催化及行业对比分析后方可再评估。暂时维持unknown。"
+          }
+        },
+        "dataQuality": {
+          "verdict": "insufficient",
+          "issues": [
+            "缺乏公司财务数据（收入、利润、现金流、债务）",
+            "缺乏新闻与市场情绪数据",
+            "缺乏股票价格、成交量及技术图表",
+            "仅含单日期权快照，无历史趋势对比",
+            "未提供同行业可比公司数据"
+          ]
+        },
+        "marketMainline": {
+          "verdict": "unknown",
+          "confidence": 0.1,
+          "reason": "无行业、板块、主题或资金流向对比数据，无法判断SPCE是否属于当前市场热点主线还是孤立个股流动。期权活跃可能仅反映其自身高投机属性，而非主题联动。",
+          "evidence": []
+        },
+        "liquidity": {
+          "verdict": "insufficient",
+          "reason": "期权流动显示成交量巨大（日均期权成交量约58万），期权流动性充足；但底层股票流动性指标完全缺失（日均成交量、买卖价差、自由流通市值），无法确认建仓与退出效率。",
+          "optionFlowEvidence": [
+            "股票期权总成交量581923，周转率约8083万美元，市场深度尚可",
+            "LEAP成交量35579，未平仓141091，流动性可支持中长期策略",
+            "主要合约买卖价差合理（如近月6C bid/ask 2.9/3.0）"
+          ],
+          "stockLiquidityEvidence": []
+        },
+        "valuationExpectation": {
+          "verdict": "unknown",
+          "reason": "缺乏财务数据与股价水平，无法判断市场在定价何种预期。期权高IV与大量看涨可能反映对商业化进展的乐观定价，但也能是纯粹投机。",
+          "whatMarketMayBePricing": [
+            "太空旅游商业化运营即将实现的概率",
+            "公司获得新融资或技术突破的可能性",
+            "市场对高风险资产的投机需求",
+            "短期事件（如试飞）驱动"
+          ],
+          "missingData": [
+            "当前股价",
+            "每股销售额、每股账面价值",
+            "可比公司估值乘数",
+            "未来现金流预测"
+          ]
+        },
+        "industryResearch": {
+          "level": "unknown",
+          "industryPosition": "维珍银河为商业太空旅游先驱，但进度落后于计划，面临蓝色起源、SpaceX等竞争，行业整体仍处早期非盈利阶段。",
+          "upstream": [
+            "航天器制造与零部件供应商",
+            "发射场地运营方",
+            "燃料与材料供应商"
+          ],
+          "downstream": [
+            "高净值个人太空游客",
+            "政府科研客户（NASA等）",
+            "广告及企业赞助"
+          ],
+          "competitors": [
+            "蓝色起源（Blue Origin）",
+            "SpaceX（载人龙飞船）",
+            "其他新兴同类（如Zephalto）"
+          ],
+          "keyQuestions": [
+            "商业运营实际乘客数及收入确认情况",
+            "现金消耗速度与现有跑道是否足够支撑至盈利",
+            "技术可靠性与安全记录",
+            "监管审批进度（FAA载人飞行牌照）",
+            "成本下降路径及规模效应"
+          ]
+        },
+        "optionFlowRead": {
+          "summary": "整体期权流动为极度看涨结构，看涨成交量与未平仓遥遥领先，CP比1.84。近月合约爆量且IV极高，可能为事件前投机；LEAP看涨交投活跃，权利金集中于中低行权价，反映中长期看涨蓄力。但需注意普涨格局下亦存在看跌对冲活动。",
+          "leapInterpretation": "LEAP看涨合约成交集中在2027年1月到期、15/10/7等行权价，权利金合计约1299万。15C成交9003，未平仓21939，成为最热LEAP合约。这些合约的高未平仓与成交量表明有资金持续押注中期股价突破15美元，但需注意部分低价LEAP如3C、4C的未平仓更多体现深度实值对冲或组合策略。整体LEAP CP比2.2显示中长期偏向看涨，但需更多时间验证。",
+          "abnormalEvidence": [
+            "近月6C成交42336张，权利金约1300万，为该到期日最集中流向",
+            "6C IV 378%，远高于LEAP普遍140%-180%，显示巨大短期波动预期",
+            "LEAP 15C OI 21939，且权利金达247万，为深度虚值合约中罕见"
+          ],
+          "counterEvidence": [
+            "LEAP 看跌合约如2028-01-21 3.5P 成交5024张，权利金65万，显示一定对冲需求",
+            "近月高IV也可能吸引卖权（如卖出看跌）行为，非纯多头"
+          ]
+        },
+        "stockTradePlan": {
+          "stance": "watch",
+          "buyConditions": [
+            "公司发布商业化运营的具体时间表，且乘客订票数据强劲",
+            "季度报告显示收入实质性增长，现金消耗大幅收窄",
+            "股价突破关键技术阻力位且伴有成交量放大",
+            "获得权威分析师上调评级且目标价大幅提升"
+          ],
+          "addConditions": [
+            "首次买入后，基本面改善信号延续验证",
+            "公司获得大额融资或政府合同",
+            "期权未平仓持续净增，且标的股票流动性提升"
+          ],
+          "sellOrDowngradeConditions": [
+            "任何试飞失败或安全事故",
+            "财务报告显示现金仅可支撑不足6个月",
+            "大规模股权稀释计划",
+            "监管延迟或撤销许可证"
+          ],
+          "invalidation": "若公司基本面长期无改善，股价持续低于关键支撑位且期权流动性枯竭，应放弃关注。"
+        },
+        "risks": [
+          "流动性风险：底层股票流动性未知，可能无法顺利进出",
+          "集中风险：分析完全基于富途期权数据，未覆盖其他市场或工具",
+          "事件风险：高度依赖里程碑事件，失败可能导致股价暴跌",
+          "估值风险：缺乏合理估值锚点，投机性极高",
+          "数据质量风险：关键信息缺失，任何结论均不牢靠",
+          "行业风险：商业太空旅游需求不确定，竞争激烈"
+        ],
+        "researchSources": [],
+        "missingData": [
+          "股价、历史波动率、日成交量等基础市场数据",
+          "公司最新季报/年报（包含收入、利润、现金流、资产负债）",
+          "分析师评级与目标价汇总",
+          "最新新闻流（新产品、合作伙伴、监管进展）",
+          "内部人交易记录与主要股东持仓变化",
+          "同行业可比公司估值数据",
+          "期权历史OI/PCR趋势（非单日静态）"
+        ],
+        "nextResearchTasks": [
+          "查阅SPCE最近10-K/10-Q报告，重点关注现金储备、债务到期结构与客户预收款",
+          "浏览主流财经媒体及公司新闻稿，梳理近3个月催化事件",
+          "通过Bloomberg/Reuters提取分析师一致预期与评级变化",
+          "分析盘后期权数据，验证LEAP看涨OI是否有净增",
+          "检查SPCE日线图及均量，确认技术面支撑位与股票流动性",
+          "调查竞争对手（如RKLB、SPAC相关）近期股价与业务进展"
+        ]
+      },
+      "premarketSnapshot": {
+        "ticker": "SPCE",
+        "code": "US.SPCE",
+        "name": "维珍银河",
+        "session": "premarket",
+        "marketState": "PRE_MARKET_BEGIN",
+        "lastPrice": 6.85,
+        "prevClose": 6.18,
+        "change": 0.6699999999999999,
+        "changeRate": -8.909,
+        "volume": 1186486.0,
+        "turnover": 8313975.831,
+        "quoteTime": "2026-06-02 08:01:45.832",
+        "rawAvailableFields": [
+          "after_change_rate",
+          "after_change_val",
+          "after_turnover",
+          "after_volume",
+          "circular_market_val",
+          "close_price_5min",
+          "future_last_settle_price",
+          "future_last_trade_time",
+          "future_position_change",
+          "last_price",
+          "option_premium",
+          "overnight_change_rate",
+          "overnight_change_val",
+          "overnight_turnover",
+          "overnight_volume",
+          "pre_amplitude",
+          "pre_change_rate",
+          "pre_change_val",
+          "pre_high_price",
+          "pre_low_price",
+          "pre_price",
+          "pre_turnover",
+          "pre_volume",
+          "prev_close_price",
+          "price_spread",
+          "short_available_volume",
+          "total_market_val",
+          "trust_premium",
+          "turnover",
+          "turnover_rate",
+          "volume",
+          "volume_ratio",
+          "wrt_premium"
+        ],
+        "capturedAt": "2026-06-02T12:01:49.255593+00:00",
+        "source": "futu"
+      }
     }
   ],
   "topOptionAlerts": [
@@ -23118,15 +24349,76 @@
     }
   ],
   "errors": [],
-  "aiGeneratedAt": "",
-  "aiModel": "gpt-4.1-mini",
+  "aiGeneratedAt": "2026-06-02T11:45:36.369Z",
+  "aiModel": "deepseek-v4-pro",
   "aiStatus": {
-    "state": "skipped",
-    "reason": "missing_openai_api_key",
-    "detail": "OPENAI_API_KEY is not configured.",
-    "generatedAt": "2026-06-02T10:19:42.519Z",
+    "state": "complete",
+    "model": "deepseek-v4-pro",
+    "agentPreset": "tradingagents",
+    "agentReference": "TauricResearch/TradingAgents",
+    "generatedAt": "2026-06-02T11:45:36.370Z",
     "webSearch": false,
-    "error": "OPENAI_API_KEY is not configured."
+    "error": ""
   },
-  "aiSummary": null
+  "aiSummary": {
+    "headline": "期权市场看涨信号强劲，但基本面数据缺失，多数标的维持观察评级",
+    "strongestStocks": [
+      {
+        "ticker": "AMZN",
+        "reason": "期权资金流极为强劲，LEAP看涨期权成交量及权利金居首，评分最高，但缺少基本面确认，暂观察。"
+      },
+      {
+        "ticker": "NOK",
+        "reason": "看涨期权比率极高，资金流积极，但需补充股价及财务数据。"
+      }
+    ],
+    "commonThemes": [
+      "期权市场显示强烈看涨倾向，但缺乏基本面、新闻与行业数据支持",
+      "各标的均存在关键数据缺口，无法形成完整投资逻辑",
+      "需等待财报或明确催化剂后再做决策"
+    ],
+    "tomorrowChecks": [
+      "监控AMZN、NVDA等大型科技股的最新新闻与分析师报告",
+      "检查NOK股价及成交量是否出现异动",
+      "关注SPCE是否有新产品或合作公告",
+      "审视宏观经济数据如利率对TSLA等成长股的影响"
+    ],
+    "avoidList": [
+      {
+        "ticker": "SPCE",
+        "reason": "基本面数据严重缺失，委员会评级为未知，投机性强，建议规避至更多信息出现。"
+      }
+    ],
+    "portfolioRead": "当前投资组合覆盖5只美国个股（AMZN、NOK、NVDA、TSLA、SPCE）。期权扫描显示所有标的均出现显著看涨资金流，尤其以AMZN和NOK的最远期看涨期权活跃度最高。然而，委员会对所有标的均给出“观察”或“未知”评级，主要因缺少基本面验证数据，包括最新财报、分析师评级、公司新闻及行业对比等。因此，组合整体偏向谨慎，建议在数据补齐前不进行新增买入操作。",
+    "committeeRead": "交易委员会对各标的进行了逐一审议：AMZN期权表现极端但数据不够，NOK看涨比率高但背景不明，NVDA与TSLA投机氛围浓厚，SPCE数据最不完整。所有决策均受限于信息缺失，共识为等待更多基本面数据及市场主线确认。整体信心度偏低。",
+    "missingData": [
+      "各标的均缺失最新季度财报数据",
+      "缺乏分析师盈利预测与评级更新",
+      "缺乏公司近期新闻与催化剂信息",
+      "缺少行业板块资金流对比及宏观经济指标",
+      "SPCE额外缺失股价与历史波动率数据"
+    ],
+    "nextResearchTasks": [
+      "优先获取AMZN、NOK、NVDA、TSLA的最新季度财报与分析师报告",
+      "监控SPCE的新闻动态，寻找潜在催化剂",
+      "收集行业资金流数据以验证期权信号的板块效应",
+      "制定数据补齐后的再评估流程"
+    ]
+  },
+  "aiAgentPreset": "tradingagents",
+  "aiAgentReference": "TauricResearch/TradingAgents",
+  "premarketGeneratedAt": "2026-06-02T12:01:49.255593+00:00",
+  "premarketStatus": {
+    "state": "complete",
+    "generatedAt": "2026-06-02T12:01:49.255593+00:00",
+    "tickers": [
+      "AMZN",
+      "NOK",
+      "NVDA",
+      "SPCE",
+      "TSLA"
+    ],
+    "snapshots": 5,
+    "source": "futu"
+  }
 }

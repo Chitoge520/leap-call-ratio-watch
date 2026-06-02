@@ -13,6 +13,8 @@ const apiKey = process.env.OPENAI_API_KEY;
 const model = process.env.OPENAI_MODEL || "gpt-4.1-mini";
 const baseUrl = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
 const useResponsesApi = process.env.OPENAI_USE_RESPONSES !== "0" && baseUrl.includes("api.openai.com");
+const agentPreset = process.env.STOCK_AGENT_PRESET || "tradingagents";
+const agentReference = process.env.STOCK_AGENT_REFERENCE || "TauricResearch/TradingAgents";
 
 if (!existsSync(reportPath)) {
   throw new Error("data/latest-report.json not found. Run npm run scan:futu first.");
@@ -29,7 +31,7 @@ if (!apiKey) {
   const analyzed = await analyzeReport(report);
   writeFileSync(reportPath, JSON.stringify(analyzed, null, 2), "utf8");
   if (existsSync(dbPath)) await updateDatabase(analyzed);
-  console.log(`AI analysis completed for ${analyzed.records.length} records with ${model}.`);
+  console.log(`AI analysis completed for ${analyzed.records.length} records with ${model} (${agentPreset}).`);
 }
 
 async function analyzeReport(sourceReport) {
@@ -44,9 +46,13 @@ async function analyzeReport(sourceReport) {
     ...sourceReport,
     aiGeneratedAt: new Date().toISOString(),
     aiModel: model,
+    aiAgentPreset: agentPreset,
+    aiAgentReference: agentReference,
     aiStatus: {
       state: "complete",
       model,
+      agentPreset,
+      agentReference,
       generatedAt: new Date().toISOString(),
       webSearch: useResponsesApi,
       error: ""
@@ -62,34 +68,31 @@ async function analyzeRecord(record, report) {
   const messages = [
     {
       role: "system",
-      content: [
-        "你是严谨的美股盘后研究分析师，专门把期权异动转化为正股研究假设。",
-        "你必须优先使用用户提供的 Futu OpenD 真实行情、期权链、远月 LEAP 合约、成交量、OI 和权利金数据。",
-        "当问题需要新闻、财报、估值、产业链、行业 ETF 或同行对比时，如果工具支持 web search，你必须搜索并给出来源；如果无法确认，必须写 unknown，不得编造。",
-        "期权只作为资金流证据，禁止输出期权买卖建议。交易计划只能针对正股买入、加仓、卖出或降级。",
-        "输出必须是严格 JSON，不要 Markdown，不要代码块。"
-      ].join("\n")
+      content: buildSystemPrompt()
     },
     {
       role: "user",
       content: [
-        "请围绕以下 5 个固定问题生成研究报告：",
-        "1. 市场主线：这只股票是否属于当前市场主线？是板块共振还是个股孤立异动？",
-        "2. 成交量：正股与期权成交是否足够支撑研究？远月 LEAP 资金流是否有意义？",
-        "3. 估值预期：市场可能在押什么预期？哪些事实还缺失？",
-        "4. 产业链研究：公司在产业链的位置、上游、下游、关键竞争对手和需要继续验证的问题。",
-        "5. 正股计划：只针对正股，给出买入、加仓、卖出/降级条件和失效条件。",
+        "Analyze this one stock using the TradingAgents-style committee.",
         "",
-        "要求：",
-        "- 明确区分 Futu 数据事实、搜索确认的信息、推断、unknown。",
-        "- 单独解释 topLeapContracts 里的远月合约，而不是只看 0DTE 来源合约。",
-        "- researchSources 需要包含 title、url、publisher、usedFor；没有来源则空数组。",
-        "- missingData 和 nextResearchTasks 必须具体可执行。",
-        "- 如果无法回答，写 unknown，并说明需要什么数据。",
+        "Required fixed questions:",
+        "1. Market mainline: is this stock part of the current market theme, sector confirmation, or an isolated single-stock flow?",
+        "2. Volume/liquidity: are stock liquidity and option liquidity sufficient for research? Is the LEAP flow meaningful?",
+        "3. Valuation expectation: what may the market be pricing, what is already priced, and what remains unknown?",
+        "4. Industry chain: company position, upstream/downstream, competitors, and questions that need verification.",
+        "5. Stock plan only: buy/add/sell/downgrade/watch conditions for the underlying stock. Do not recommend option trades.",
         "",
-        `请按这个 JSON 结构输出：${JSON.stringify(schema)}`,
+        "Important constraints:",
+        "- Separate Futu facts, model inference, and unknowns.",
+        "- Explain topLeapContracts separately from 0DTE or near-term source contracts.",
+        "- If web search is unavailable, researchSources can be empty, but missingData and nextResearchTasks must be concrete.",
+        "- If the data cannot support a conclusion, say unknown and specify the missing data.",
+        "- Write all narrative text in Simplified Chinese. Keep JSON keys and enum values in English.",
+        "- Return strict JSON only. No markdown, no code block.",
         "",
-        `输入数据：${JSON.stringify(payload, null, 2)}`
+        `Expected JSON shape: ${JSON.stringify(schema)}`,
+        "",
+        `Input data: ${JSON.stringify(payload, null, 2)}`
       ].join("\n")
     }
   ];
@@ -101,6 +104,8 @@ async function analyzeDailySummary(report) {
     generatedAt: report.generatedAt,
     source: report.source,
     config: report.config,
+    agentPreset,
+    agentReference,
     records: (report.records || []).map((record) => ({
       ticker: record.ticker,
       name: record.name,
@@ -111,8 +116,9 @@ async function analyzeDailySummary(report) {
       premiumFlow: record.premiumFlow,
       hotContract: record.hotContract,
       topLeapContracts: (record.topLeapContracts || []).slice(0, 3),
-      aiVerdict: record.aiAnalysis?.marketMainline?.verdict,
-      aiStance: record.aiAnalysis?.stockTradePlan?.stance,
+      committeeDecision: record.aiAnalysis?.tradingAgentsReview?.portfolioManagerDecision,
+      marketMainline: record.aiAnalysis?.marketMainline?.verdict,
+      stockStance: record.aiAnalysis?.stockTradePlan?.stance,
       missingData: record.aiAnalysis?.missingData
     }))
   };
@@ -120,13 +126,17 @@ async function analyzeDailySummary(report) {
     [
       {
         role: "system",
-        content:
-          "你是美股盘后研究总监。你只基于提供的 Futu 扫描结果和已完成的单票 AI 研究做日终总结。禁止给期权交易建议。输出严格 JSON。"
+        content: [
+          "You are the daily Research Manager for an after-close US equity research desk.",
+          "Use only the supplied Futu scan results and completed per-stock committee reports.",
+          "Summarize stock research priorities. Do not recommend option trades.",
+          "Return strict JSON only."
+        ].join("\n")
       },
       {
         role: "user",
         content:
-          "请总结今天最值得跟踪的正股、共同产业线索、明天需要验证的 OI/正股价格条件，以及不应行动的样本。数据如下：\n" +
+          "Create the daily portfolio-level research summary in Simplified Chinese: strongest stocks, avoid/watch names, common themes, tomorrow checks, and unresolved data gaps. Keep JSON keys and enum values in English.\n" +
           JSON.stringify(compact, null, 2)
       }
     ],
@@ -137,10 +147,46 @@ async function analyzeDailySummary(report) {
       tomorrowChecks: [],
       avoidList: [],
       portfolioRead: "",
+      committeeRead: "",
       missingData: [],
       nextResearchTasks: []
     }
   );
+}
+
+function buildSystemPrompt() {
+  if (agentPreset !== "tradingagents") {
+    return [
+      "You are a rigorous US equity after-close research analyst.",
+      "Use the supplied Futu OpenD option flow, option chain, OI, premium, and LEAP data first.",
+      "Options are evidence only. The plan must be for the underlying stock, not option trades.",
+      "Write all narrative text in Simplified Chinese. Keep JSON keys and enum values in English.",
+      "Return strict JSON only."
+    ].join("\n");
+  }
+
+  return [
+    "You are a TradingAgents-style multi-agent stock research committee adapted for this project.",
+    "Reference architecture: TauricResearch/TradingAgents. Emulate the role structure, not external execution.",
+    "",
+    "Roles to simulate inside one JSON answer:",
+    "- Fundamentals Analyst: company quality, financial/valuation unknowns, business risks.",
+    "- Sentiment/News Analyst: catalysts, news gaps, market narrative, unknown if not verifiable.",
+    "- Technical/Flow Analyst: Futu option-volume rank, LEAP contracts, OI, premium, CP ratio, liquidity.",
+    "- Bull Researcher: strongest bullish thesis supported by the supplied facts.",
+    "- Bear Researcher: strongest skeptical thesis and failure modes.",
+    "- Risk Manager: liquidity, concentration, event, valuation, and data-quality risks.",
+    "- Portfolio Manager: final stock-only decision: buy_setup, add_setup, watch, avoid, downgrade, or unknown.",
+    "",
+    "Hard rules:",
+    "- Use supplied Futu facts first. Do not invent news, financials, valuation numbers, or sources.",
+    "- Mark unsupported facts as unknown and place them in missingData.",
+    "- Explain long-dated topLeapContracts separately from near-term source contracts.",
+    "- Options are only evidence of capital flow. Never recommend buying/selling option contracts.",
+    "- The final plan is for the underlying stock only.",
+    "- Write all narrative text in Simplified Chinese. Keep JSON keys and enum values in English.",
+    "- Return strict JSON only. No markdown, no code block."
+  ].join("\n");
 }
 
 function buildRecordPayload(record, report) {
@@ -148,6 +194,8 @@ function buildRecordPayload(record, report) {
     reportDate: record.date || String(report.generatedAt || "").slice(0, 10),
     ticker: record.ticker,
     name: record.name,
+    agentPreset,
+    agentReference,
     futuOptionVolumeRankEvidence: {
       stockOptionVolume: record.stockOptionVolume,
       stockOptionTurnover: record.stockOptionTurnover,
@@ -164,6 +212,7 @@ function buildRecordPayload(record, report) {
       optionChainExpirations: record.optionChainExpirations || [],
       optionChainExpirationCount: record.optionChainExpirationCount
     },
+    premarketEvidence: record.premarketSnapshot || null,
     optionFlowMetrics: {
       score: record.score,
       cpRatio: record.cpRatio,
@@ -199,6 +248,43 @@ function buildRecordPayload(record, report) {
 function recordSchema() {
   return {
     executiveSummary: "",
+    tradingAgentsReview: {
+      fundamentalsAnalyst: {
+        thesis: "",
+        evidence: [],
+        unknowns: []
+      },
+      sentimentNewsAnalyst: {
+        thesis: "",
+        evidence: [],
+        unknowns: []
+      },
+      technicalFlowAnalyst: {
+        thesis: "",
+        nearTermContractRead: "",
+        leapContractRead: "",
+        evidence: [],
+        counterEvidence: []
+      },
+      bullResearcher: {
+        thesis: "",
+        strongestEvidence: []
+      },
+      bearResearcher: {
+        thesis: "",
+        strongestRisks: []
+      },
+      riskManager: {
+        riskLevel: "low / medium / high / unknown",
+        reasons: [],
+        requiredChecks: []
+      },
+      portfolioManagerDecision: {
+        stance: "watch / buy_setup / add_setup / avoid / downgrade / unknown",
+        confidence: 0,
+        rationale: ""
+      }
+    },
     dataQuality: {
       verdict: "sufficient / partial / insufficient",
       issues: []
@@ -275,7 +361,7 @@ async function callChatJson(messages, schemaHint) {
         ...messages,
         {
           role: "user",
-          content: `请严格返回 JSON。结构参考：${JSON.stringify(schemaHint)}`
+          content: `Return strict JSON only. Write all narrative text in Simplified Chinese. Keep JSON keys and enum values in English. Shape reference: ${JSON.stringify(schemaHint)}`
         }
       ]
     })
@@ -301,9 +387,9 @@ async function callResponsesJson(messages, schemaHint) {
       temperature: 0.2,
       tools: [{ type: "web_search_preview" }],
       input:
-        `${input}\n\n必须返回严格 JSON。` +
-        `无法确认的事实写 unknown。researchSources 必须列出搜索或引用来源。` +
-        `禁止输出期权买卖建议。JSON 结构：${JSON.stringify(schemaHint)}`
+        `${input}\n\nReturn strict JSON only. Unsupported facts must be unknown. ` +
+        `Write all narrative text in Simplified Chinese. Keep JSON keys and enum values in English. ` +
+        `Do not recommend option trades. JSON shape: ${JSON.stringify(schemaHint)}`
     })
   });
   const text = await response.text();
@@ -324,10 +410,15 @@ function markAiSkipped(sourceReport, reason, detail) {
     ...sourceReport,
     aiGeneratedAt: "",
     aiModel: model,
+    aiAgentPreset: agentPreset,
+    aiAgentReference: agentReference,
     aiStatus: {
       state: "skipped",
       reason,
       detail,
+      model,
+      agentPreset,
+      agentReference,
       generatedAt: new Date().toISOString(),
       webSearch: false,
       error: detail

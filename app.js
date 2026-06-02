@@ -842,6 +842,7 @@ function generateNote(record) {
 
   return `
     ${ai ? renderAiAnalysis(record, ai) : renderAiUnavailable()}
+    ${renderPremarketSnapshot(record)}
     <section class="local-analysis-panel">
       <div class="section-head">
         <div>
@@ -947,6 +948,45 @@ function renderAiUnavailable() {
         <span>OPENAI_API_KEY 未配置或尚未执行 AI 分析</span>
       </div>
       <p>当前页面展示的是本地规则参考，不是大模型投研报告。配置 <code>OPENAI_API_KEY</code> 后运行 <code>npm run analyze:ai</code>，或等待盘后自动任务生成 AI 报告。</p>
+    </section>
+  `;
+}
+
+function renderPremarketSnapshot(record) {
+  const snapshot = record.premarketSnapshot;
+  if (!snapshot) {
+    return `
+      <section class="premarket-panel">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Premarket Check</p>
+            <h3>盘前正股确认</h3>
+          </div>
+          <span>尚未拉取盘前快照</span>
+        </div>
+        <p>运行 <code>npm run premarket:futu</code> 后，这里会显示当前 Top5 标的的盘前价格、涨跌幅、成交量和市场状态。</p>
+      </section>
+    `;
+  }
+  const change = number(snapshot.change);
+  const changeRate = number(snapshot.changeRate);
+  const direction = change > 0 ? "good" : change < 0 ? "bad" : "warn";
+  return `
+    <section class="premarket-panel">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Premarket Check</p>
+          <h3>盘前正股确认</h3>
+        </div>
+        <span>${snapshot.session || "unknown"} · ${snapshot.marketState || "-"}</span>
+      </div>
+      <div class="summary-grid">
+        <article><span>盘前/最新价</span><strong>${formatPrice(snapshot.lastPrice)}</strong><small>昨收 ${formatPrice(snapshot.prevClose)}</small></article>
+        <article><span>涨跌幅</span><strong class="${direction}">${change >= 0 ? "+" : ""}${formatPrice(change)}</strong><small>${changeRate >= 0 ? "+" : ""}${changeRate.toFixed(2)}%</small></article>
+        <article><span>成交量</span><strong>${compactNumber(snapshot.volume)}</strong><small>成交额 ${compactNumber(snapshot.turnover)}</small></article>
+        <article><span>更新时间</span><strong>${snapshot.quoteTime || "-"}</strong><small>${String(snapshot.capturedAt || "").slice(0, 19)}</small></article>
+      </div>
+      <p>这块数据用于验证盘后期权异动是否在次日盘前得到正股价格确认，不改变期权成交量 Top5 的原始排序。</p>
     </section>
   `;
 }

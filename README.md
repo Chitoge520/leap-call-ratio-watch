@@ -11,6 +11,7 @@
 - 远月合约验证：正式期权成交量扫描会额外抓取 LEAP 到期日，避免只看到当日或近月合约。
 - AI 研究报告：用 OpenAI Responses API 生成五段式个股研究；没有 API key 时会标记 `aiStatus.skipped`，前端展示本地规则分析和缺口提示。
 - 盘后自动任务：`npm start` 常驻服务会在美东 `16:30` 检查 OpenD 和美股交易日，满足条件后自动扫描、分析并增量回测。
+- 盘前正股确认：在美东 `08:30` 自动拉取当前 Top5 的正股盘前/最新快照，并重新运行 AI 分析，把盘前涨跌幅、成交量和市场状态加入报告。
 - 正股回测：对每天 Top5 信号，使用 Futu 日线计算扫描日后第 20 / 60 / 120 个美股交易日的正股收益。
 - Web 展示：包含异常榜、AI 研究报告、历史报告、Backtest 汇总/明细、任务状态和数据导入导出。
 
@@ -73,6 +74,18 @@ npm run backtest:futu
 npm run analyze:ai
 ```
 
+如果只想在盘前更新当前 Top5 的正股快照：
+
+```bash
+npm run premarket:futu
+```
+
+如果想更新盘前快照后立刻重跑 AI：
+
+```bash
+npm run premarket:futu:ai
+```
+
 ## Futu 扫描模式
 
 ### 期权成交量 Top5
@@ -125,6 +138,8 @@ FUTU_OPEND_PORT=11111
 
 AUTO_SCAN_ENABLED=1
 AUTO_SCAN_TIME_ET=16:30
+AUTO_PREMARKET_ENABLED=1
+AUTO_PREMARKET_TIME_ET=08:30
 
 FUTU_OPTION_SCREEN_CONTRACTS=500
 FUTU_MAX_SYMBOLS=5
@@ -147,6 +162,19 @@ OPENAI_API_KEY=your_api_key
 OPENAI_MODEL=gpt-4.1-mini
 OPENAI_BASE_URL=https://api.openai.com/v1
 OPENAI_USE_RESPONSES=1
+STOCK_AGENT_PRESET=tradingagents
+STOCK_AGENT_REFERENCE=TauricResearch/TradingAgents
+```
+
+DeepSeek 配置示例：
+
+```text
+OPENAI_API_KEY=your_deepseek_api_key
+OPENAI_MODEL=deepseek-v4-pro
+OPENAI_BASE_URL=https://api.deepseek.com
+OPENAI_USE_RESPONSES=0
+STOCK_AGENT_PRESET=tradingagents
+STOCK_AGENT_REFERENCE=TauricResearch/TradingAgents
 ```
 
 如果没有配置 `OPENAI_API_KEY`，`npm run analyze:ai` 不会中断主流程，而是写入：
@@ -162,9 +190,11 @@ OPENAI_USE_RESPONSES=1
 
 前端会显示 AI 缺失提示，并保留本地规则分析。
 
-## AI 五段式研究
+## AI Agent 研究
 
-每个 Top5 标的固定回答 5 个问题：
+当前 AI 层接入的是 TradingAgents-style 多角色研究结构，参考开源项目 `TauricResearch/TradingAgents` 的分析师、研究员、交易员、风控和组合经理分工。项目不会直接安装或运行完整 TradingAgents Python 框架，而是在现有 `npm run analyze:ai` 里用 DeepSeek/OpenAI-compatible API 模拟同样的研究委员会结构，并把结论写入 Web 报告。
+
+每个 Top5 标的仍然固定回答 5 个问题：
 
 1. 是否属于当前市场主线。
 2. 成交量和流动性是否足够。
@@ -174,6 +204,7 @@ OPENAI_USE_RESPONSES=1
 
 输出字段包括：
 
+- `tradingAgentsReview`
 - `aiResearch`
 - `researchSources`
 - `missingData`
@@ -188,7 +219,7 @@ OPENAI_USE_RESPONSES=1
 
 ## 盘后自动任务
 
-`npm start` 会启动 Web 服务和自动任务。默认逻辑：
+`npm start` 会启动 Web 服务、盘前任务和盘后任务。盘后默认逻辑：
 
 1. 按美东 `AUTO_SCAN_TIME_ET=16:30` 触发。
 2. 检查 Futu OpenD 是否连接。
@@ -209,6 +240,27 @@ Web 首页也会显示：
 - 上次运行时间
 - 下次运行时间
 - 最近错误
+
+盘前任务默认在美东 `08:30` 触发，执行：
+
+```text
+premarket:futu -> analyze:ai
+```
+
+它不会重新扫描期权链，也不会改变盘后期权成交量 Top5 排名，只会给当前 Top5 补充 `premarketSnapshot`：
+
+```json
+{
+  "lastPrice": 0,
+  "prevClose": 0,
+  "change": 0,
+  "changeRate": 0,
+  "volume": 0,
+  "turnover": 0,
+  "marketState": "",
+  "session": "premarket"
+}
+```
 
 ## 回测
 
