@@ -466,6 +466,7 @@ def build_source_only_record(symbol, leap_days, error):
         "stockOptionVolume": stock_option_volume,
         "stockOptionTurnover": meta.get("stockOptionTurnover", 0),
         "sourceTopOptionContracts": source_top_contracts,
+        "topLeapContracts": [],
         "optionChainExpirations": option_chain_expirations,
         "optionChainExpirationCount": len(option_chain_expirations),
         "streak": 1,
@@ -852,6 +853,7 @@ def analyze_symbol(symbol, rows, leap_days):
             "ticker": row.get("code", ""),
             "type": option_type,
             "expirationDate": expiration.isoformat() if expiration else "",
+            "strike": number(row.get("strike_price") or row.get("option_strike_price")),
             "volume": volume,
             "openInterest": open_interest,
             "price": price,
@@ -882,6 +884,7 @@ def analyze_symbol(symbol, rows, leap_days):
     leap_call_oi = sum_item(leap_calls, "openInterest")
     total_call_oi = sum_item(calls, "openInterest")
     hot = max(leap_calls, key=lambda item: item["volume"], default={})
+    top_leap_contracts = sorted(leap_calls, key=lambda item: item["volume"], reverse=True)[:10]
     company_name = STOCK_META.get(symbol, {}).get("name") or infer_name(symbol, rows)
     stock_dollar_volume = STOCK_META.get(symbol, {}).get("stockDollarVolume", 0)
     stock_volume = STOCK_META.get(symbol, {}).get("stockVolume", 0)
@@ -924,6 +927,7 @@ def analyze_symbol(symbol, rows, leap_days):
         "stockOptionVolume": stock_option_volume,
         "stockOptionTurnover": stock_option_turnover,
         "sourceTopOptionContracts": source_top_contracts,
+        "topLeapContracts": top_leap_contracts,
         "optionChainExpirations": option_chain_expirations,
         "optionChainExpirationCount": len(option_chain_expirations),
         "streak": 1,

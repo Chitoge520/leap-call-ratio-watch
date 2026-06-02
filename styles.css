@@ -556,6 +556,24 @@ tbody tr:hover {
   font-size: 14px;
 }
 
+.ai-summary {
+  margin: 0 0 14px;
+  font-weight: 700;
+}
+
+.ai-missing {
+  border-color: #d8bf7e;
+  background: #fff8e6;
+}
+
+.local-analysis-panel {
+  margin-bottom: 22px;
+  padding: 18px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  background: #fffbf3;
+}
+
 .chain-toolbar {
   display: flex;
   justify-content: space-between;

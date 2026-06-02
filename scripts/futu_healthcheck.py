@@ -38,7 +38,7 @@ def main():
             payload["error"] = str(data)
         else:
             payload["connected"] = True
-            rows = json.loads(data.to_json(orient="records", force_ascii=False))
+            rows = normalize_trading_days(data)
             payload["isTradingDay"] = bool(rows)
     except Exception as exc:
         payload["error"] = str(exc)
@@ -47,6 +47,16 @@ def main():
             quote_ctx.close()
 
     print(json.dumps(payload, ensure_ascii=False))
+
+
+def normalize_trading_days(data):
+    if hasattr(data, "to_json"):
+        return json.loads(data.to_json(orient="records", force_ascii=False))
+    if isinstance(data, (list, tuple, set)):
+        return list(data)
+    if data:
+        return [data]
+    return []
 
 
 def load_dotenv(path):

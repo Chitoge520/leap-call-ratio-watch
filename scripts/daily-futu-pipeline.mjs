@@ -18,13 +18,7 @@ mkdirSync(futuAppData, { recursive: true });
 env.APPDATA = env.APPDATA || futuAppData;
 
 await run("python", ["scripts/scan_futu.py"], env);
-
-if (env.OPENAI_API_KEY) {
-  await run("node", ["scripts/ai-analyze.mjs"], env);
-} else {
-  console.log("OPENAI_API_KEY not set; skipped AI research enrichment.");
-}
-
+await run("node", ["scripts/ai-analyze.mjs"], env);
 await run("python", ["scripts/backtest_futu.py"], env);
 
 function run(command, args, envVars) {

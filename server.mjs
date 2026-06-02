@@ -305,9 +305,34 @@ function startScheduler() {
   mkdirSync(path.join(root, "data"), { recursive: true });
   updateNextRun();
   persistJobState();
+  setTimeout(refreshOpenDStatus, 1000);
+  setInterval(refreshOpenDStatus, 5 * 60_000);
   if (!autoScanEnabled) return;
   setTimeout(checkScheduler, 2500);
   setInterval(checkScheduler, 60_000);
+}
+
+async function refreshOpenDStatus() {
+  if (jobState.running) return;
+  try {
+    const et = getEtParts();
+    const health = await runJson("python", ["scripts/futu_healthcheck.py", "--trading-day", et.date]);
+    jobState.openD = health;
+    jobState.healthCheckedAt = new Date().toISOString();
+    if (jobState.lastStatus === "idle" || jobState.lastStatus === "error" || jobState.lastStatus === "disconnected") {
+      jobState.lastStatus = health.connected ? "ready" : "disconnected";
+      jobState.error = health.connected ? "" : health.error || "Futu OpenD disconnected";
+    }
+    persistJobState();
+  } catch (error) {
+    jobState.openD = { connected: false, isTradingDay: false, error: error.message };
+    jobState.healthCheckedAt = new Date().toISOString();
+    if (jobState.lastStatus === "idle" || jobState.lastStatus === "ready") {
+      jobState.lastStatus = "disconnected";
+      jobState.error = error.message;
+    }
+    persistJobState();
+  }
 }
 
 async function checkScheduler() {
@@ -375,9 +400,18 @@ function updateNextRun() {
 
 function runJson(command, args) {
   return runProcess(command, args).then((text) => {
-    const line = text.trim().split(/\r?\n/).pop() || "{}";
-    return JSON.parse(line);
+    return JSON.parse(extractJsonLine(text));
   });
+}
+
+function extractJsonLine(text) {
+  const lines = String(text || "").trim().split(/\r?\n/).reverse();
+  const line = lines.find((item) => {
+    const trimmed = item.trim();
+    return trimmed.startsWith("{") && trimmed.endsWith("}");
+  });
+  if (!line) throw new Error(`No JSON object found in command output: ${String(text).slice(-500)}`);
+  return line.trim();
 }
 
 function runProcess(command, args) {

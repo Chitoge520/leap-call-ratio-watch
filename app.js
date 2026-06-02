@@ -841,7 +841,15 @@ function generateNote(record) {
   const ai = record.aiAnalysis;
 
   return `
-    ${ai ? renderAiAnalysis(record, ai) : ""}
+    ${ai ? renderAiAnalysis(record, ai) : renderAiUnavailable()}
+    <section class="local-analysis-panel">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Local Rule Reference</p>
+          <h3>本地规则参考</h3>
+        </div>
+        <span>非大模型分析，仅用于快速校验数据结构</span>
+      </div>
     <div class="summary-grid">
       <article><span>主线判断</span><strong>${theme.label}</strong><small>${theme.score}/100</small></article>
       <article><span>流动性</span><strong>${liquidity.label}</strong><small>期权 ${compactNumber(liquidity.optionVolume)}</small></article>
@@ -883,6 +891,7 @@ function generateNote(record) {
 
     <h4>期权链原始数据</h4>
     ${renderOptionChain(record)}
+    </section>
   `;
 }
 
@@ -923,6 +932,21 @@ function renderAiAnalysis(record, ai) {
       <p>${plan.invalidation || ""}</p>
       ${renderList("风险", ai.risks)}
       ${renderList("下一步研究", ai.nextResearchTasks)}
+    </section>
+  `;
+}
+
+function renderAiUnavailable() {
+  return `
+    <section class="ai-panel ai-missing">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">AI Research</p>
+          <h3>大模型研究未运行</h3>
+        </div>
+        <span>OPENAI_API_KEY 未配置或尚未执行 AI 分析</span>
+      </div>
+      <p>当前页面展示的是本地规则参考，不是大模型投研报告。配置 <code>OPENAI_API_KEY</code> 后运行 <code>npm run analyze:ai</code>，或等待盘后自动任务生成 AI 报告。</p>
     </section>
   `;
 }
