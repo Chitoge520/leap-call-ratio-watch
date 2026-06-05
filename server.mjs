@@ -14,6 +14,10 @@ const autoScanEnabled = process.env.AUTO_SCAN_ENABLED !== "0";
 const autoScanTimeEt = process.env.AUTO_SCAN_TIME_ET || "16:30";
 const autoPremarketEnabled = process.env.AUTO_PREMARKET_ENABLED !== "0";
 const autoPremarketTimeEt = process.env.AUTO_PREMARKET_TIME_ET || "08:30";
+const autoHkScanEnabled = process.env.AUTO_HK_SCAN_ENABLED !== "0";
+const autoHkScanTimeHkt = process.env.AUTO_HK_SCAN_TIME_HKT || "16:30";
+const autoJobRetryMinutes = Math.max(5, Number(process.env.AUTO_JOB_RETRY_MINUTES || 60));
+const autoPremarketProtectMinutes = Math.max(0, Number(process.env.AUTO_PREMARKET_PROTECT_MINUTES || 90));
 const jobState = loadJobState();
 
 const mime = {
@@ -65,11 +69,13 @@ async function handleApi(url, response) {
   if (url.pathname === "/api/report") {
     const date = url.searchParams.get("date");
     const generatedAt = url.searchParams.get("generatedAt");
+    const market = String(url.searchParams.get("market") || "US").toUpperCase();
+    const source = market === "HK" ? "futu_hk" : "futu";
     const row = generatedAt
       ? await get(`SELECT raw_json FROM scan_reports WHERE generated_at = ?`, [generatedAt])
       : date
-        ? await get(`SELECT raw_json FROM scan_reports WHERE report_date = ? ORDER BY generated_at DESC LIMIT 1`, [date])
-        : await get(`SELECT raw_json FROM scan_reports ORDER BY generated_at DESC LIMIT 1`);
+        ? await get(`SELECT raw_json FROM scan_reports WHERE report_date = ? AND source = ? ORDER BY generated_at DESC LIMIT 1`, [date, source])
+        : await get(`SELECT raw_json FROM scan_reports WHERE source = ? ORDER BY generated_at DESC LIMIT 1`, [source]);
     if (!row) {
       sendJson(response, 404, { error: "Report not found" });
       return;
@@ -309,7 +315,7 @@ function startScheduler() {
   persistJobState();
   setTimeout(refreshOpenDStatus, 1000);
   setInterval(refreshOpenDStatus, 5 * 60_000);
-  if (!autoScanEnabled && !autoPremarketEnabled) return;
+  if (!autoScanEnabled && !autoPremarketEnabled && !autoHkScanEnabled) return;
   setTimeout(checkScheduler, 2500);
   setInterval(checkScheduler, 60_000);
 }
@@ -318,7 +324,7 @@ async function refreshOpenDStatus() {
   if (jobState.running) return;
   try {
     const et = getEtParts();
-    const health = await runJson("python", ["scripts/futu_healthcheck.py", "--trading-day", et.date]);
+    const health = await runJson("python", ["scripts/futu_healthcheck.py", "--market", "US", "--trading-day", et.date]);
     jobState.openD = health;
     jobState.healthCheckedAt = new Date().toISOString();
     if (jobState.lastStatus === "idle" || jobState.lastStatus === "error" || jobState.lastStatus === "disconnected") {
@@ -339,15 +345,31 @@ async function refreshOpenDStatus() {
 
 async function checkScheduler() {
   if (jobState.running) return;
+  if (jobState.lastStatus === "error" && isWithinRetryCooldown(jobState.lastAttemptAt)) return;
   const et = getEtParts();
   const nowMinutes = Number(et.hour) * 60 + Number(et.minute);
   const premarketMinutes = parseTimeToMinutes(autoPremarketTimeEt);
   const closeMinutes = parseTimeToMinutes(autoScanTimeEt);
+  const hkt = getMarketParts("Asia/Hong_Kong");
+  const hktMinutes = Number(hkt.hour) * 60 + Number(hkt.minute);
+  const hkCloseMinutes = parseTimeToMinutes(autoHkScanTimeHkt);
+  const premarketPending = autoPremarketEnabled && jobState.lastPremarketRunDateEt !== et.date;
+  const premarketProtected = premarketPending && nowMinutes >= premarketMinutes - autoPremarketProtectMinutes;
   if (autoPremarketEnabled && nowMinutes >= premarketMinutes && jobState.lastPremarketRunDateEt !== et.date) {
     await runScheduledPipeline({
       dateEt: et.date,
       kind: "premarket",
+      market: "US",
       script: ["node", ["scripts/premarket-futu-pipeline.mjs"]]
+    });
+    return;
+  }
+  if (!premarketProtected && autoHkScanEnabled && hktMinutes >= hkCloseMinutes && jobState.lastHkRunDateHkt !== hkt.date) {
+    await runScheduledPipeline({
+      dateEt: hkt.date,
+      kind: "hk_after_close",
+      market: "HK",
+      script: ["node", ["scripts/daily-hk-futu-pipeline.mjs"]]
     });
     return;
   }
@@ -356,11 +378,18 @@ async function checkScheduler() {
   await runScheduledPipeline({
     dateEt: et.date,
     kind: "after_close",
+    market: "US",
     script: ["node", ["scripts/daily-futu-pipeline.mjs"]]
   });
 }
 
-async function runScheduledPipeline({ dateEt, kind, script }) {
+function isWithinRetryCooldown(timestamp) {
+  const attemptedAt = Date.parse(timestamp || "");
+  if (!Number.isFinite(attemptedAt)) return false;
+  return Date.now() - attemptedAt < autoJobRetryMinutes * 60_000;
+}
+
+async function runScheduledPipeline({ dateEt, kind, market, script }) {
   jobState.running = true;
   jobState.runningKind = kind;
   jobState.lastAttemptAt = new Date().toISOString();
@@ -370,7 +399,7 @@ async function runScheduledPipeline({ dateEt, kind, script }) {
   persistJobState();
 
   try {
-    const health = await runJson("python", ["scripts/futu_healthcheck.py", "--trading-day", dateEt]);
+    const health = await runJson("python", ["scripts/futu_healthcheck.py", "--market", market || "US", "--trading-day", dateEt]);
     jobState.openD = health;
     if (!health.connected) {
       jobState.lastStatus = "disconnected";
@@ -380,6 +409,7 @@ async function runScheduledPipeline({ dateEt, kind, script }) {
     if (!health.isTradingDay) {
       jobState.lastStatus = "skipped_non_trading_day";
       if (kind === "premarket") jobState.lastPremarketRunDateEt = dateEt;
+      else if (kind === "hk_after_close") jobState.lastHkRunDateHkt = dateEt;
       else jobState.lastRunDateEt = dateEt;
       return;
     }
@@ -390,6 +420,9 @@ async function runScheduledPipeline({ dateEt, kind, script }) {
     if (kind === "premarket") {
       jobState.lastPremarketRunAt = new Date().toISOString();
       jobState.lastPremarketRunDateEt = dateEt;
+    } else if (kind === "hk_after_close") {
+      jobState.lastHkRunAt = new Date().toISOString();
+      jobState.lastHkRunDateHkt = dateEt;
     } else {
       jobState.lastRunAt = new Date().toISOString();
       jobState.lastRunDateEt = dateEt;
@@ -412,6 +445,10 @@ function buildPublicJobState() {
     scheduleTimeEt: autoScanTimeEt,
     premarketEnabled: autoPremarketEnabled,
     premarketScheduleTimeEt: autoPremarketTimeEt,
+    hkEnabled: autoHkScanEnabled,
+    hkScheduleTimeHkt: autoHkScanTimeHkt,
+    retryMinutes: autoJobRetryMinutes,
+    premarketProtectMinutes: autoPremarketProtectMinutes,
     ...jobState
   };
 }
@@ -431,6 +468,14 @@ function updateNextRun() {
     nextPremarketDate = addDaysIso(et.date, 1);
   }
   jobState.nextPremarketRunEt = `${nextPremarketDate} ${autoPremarketTimeEt}`;
+  const hkt = getMarketParts("Asia/Hong_Kong");
+  const hkTargetMinutes = parseTimeToMinutes(autoHkScanTimeHkt);
+  const hktMinutes = Number(hkt.hour) * 60 + Number(hkt.minute);
+  let nextHkDate = hkt.date;
+  if (hktMinutes >= hkTargetMinutes || jobState.lastHkRunDateHkt === hkt.date) {
+    nextHkDate = addDaysIso(hkt.date, 1);
+  }
+  jobState.nextHkRunHkt = `${nextHkDate} ${autoHkScanTimeHkt}`;
 }
 
 function runJson(command, args) {
@@ -497,10 +542,13 @@ function loadJobState() {
     lastRunDateEt: "",
     lastPremarketRunAt: "",
     lastPremarketRunDateEt: "",
+    lastHkRunAt: "",
+    lastHkRunDateHkt: "",
     lastAttemptAt: "",
     lastAttemptDateEt: "",
     nextRunEt: "",
     nextPremarketRunEt: "",
+    nextHkRunHkt: "",
     error: "",
     runningKind: "",
     openD: { connected: false, isTradingDay: false }
@@ -513,8 +561,12 @@ function persistJobState() {
 }
 
 function getEtParts() {
+  return getMarketParts("America/New_York");
+}
+
+function getMarketParts(timeZone) {
   const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/New_York",
+    timeZone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",

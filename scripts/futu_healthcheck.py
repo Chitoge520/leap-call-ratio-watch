@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--trading-day", default=date.today().isoformat())
+    parser.add_argument("--market", default=os.getenv("FUTU_MARKET", "US"))
     args = parser.parse_args()
 
     load_dotenv(ROOT / ".env")
@@ -25,6 +26,7 @@ def main():
         "connected": False,
         "isTradingDay": False,
         "date": args.trading_day,
+        "market": args.market.upper(),
         "host": host,
         "port": port,
         "error": "",
@@ -33,7 +35,8 @@ def main():
     quote_ctx = None
     try:
         quote_ctx = OpenQuoteContext(host=host, port=port)
-        ret, data = quote_ctx.request_trading_days(Market.US, args.trading_day, args.trading_day)
+        market = Market.HK if args.market.upper() == "HK" else Market.US
+        ret, data = quote_ctx.request_trading_days(market, args.trading_day, args.trading_day)
         if ret != RET_OK:
             payload["error"] = str(data)
         else:

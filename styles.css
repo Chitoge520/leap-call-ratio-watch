@@ -514,6 +514,42 @@ tbody tr:hover {
   font-size: 20px;
 }
 
+.futu-brief {
+  margin: 18px 0 20px;
+  padding: 16px;
+  border: 1px solid #c8ddd6;
+  border-radius: 8px;
+  background: #fbfffd;
+}
+
+.futu-brief-head {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: baseline;
+  margin-bottom: 12px;
+}
+
+.futu-brief-head span,
+.futu-brief-head small,
+.brief-block span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.futu-brief-head strong {
+  font-size: 18px;
+}
+
+.brief-block {
+  padding: 10px 0;
+  border-top: 1px solid #e0eee9;
+}
+
+.brief-block p {
+  margin: 4px 0 0;
+}
+
 .plan-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

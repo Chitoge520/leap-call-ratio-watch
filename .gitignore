@@ -10,5 +10,6 @@ data/*.db
 data/*.db-*
 data/job-status.json
 *.log
+logs/
 .DS_Store
 Thumbs.db

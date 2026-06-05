@@ -31,6 +31,7 @@ REPORTS_DIR = ROOT / "reports"
 DB_PATH = DATA_DIR / "leap_watch.db"
 LAST_CHAIN_CALL_TS = 0
 STOCK_META = {}
+HK_NAME_SYMBOLS = None
 DEFAULT_NON_SINGLE_STOCK_SYMBOLS = {
     "SPY",
     "QQQ",
@@ -71,6 +72,45 @@ DEFAULT_NON_SINGLE_STOCK_SYMBOLS = {
     "USO",
     "UNG",
 }
+DEFAULT_NON_SINGLE_HK_SYMBOLS = {
+    "02800",
+    "02828",
+    "03033",
+    "03067",
+    "03088",
+    "03188",
+    "07200",
+    "07500",
+    "07552",
+}
+HK_OPTION_CODE_FALLBACKS = {
+    "TCH": "00700",
+    "MET": "03690",
+    "XIC": "01398",
+    "ALB": "09988",
+    "PAI": "02318",
+}
+
+
+def market_code():
+    return os.getenv("FUTU_MARKET", "US").upper()
+
+
+def market_prefix():
+    return "HK" if market_code() == "HK" else "US"
+
+
+def quote_market():
+    return Market.HK if market_code() == "HK" else Market.US
+
+
+def option_market_category():
+    return OptMarketCategory.HK_STOCK if market_code() == "HK" else OptMarketCategory.US_STOCK
+
+
+def latest_report_path():
+    default_name = "latest-hk-report.json" if market_code() == "HK" else "latest-report.json"
+    return DATA_DIR / os.getenv("FUTU_REPORT_FILE", default_name)
 
 
 def main():
@@ -104,7 +144,7 @@ def main():
             symbols = config["symbols"][:max_symbols]
 
         for symbol in symbols:
-            futu_code = to_futu_us_code(symbol)
+            futu_code = to_futu_code(symbol)
             try:
                 rows = fetch_symbol_options(quote_ctx, futu_code, leap_days)
                 record = analyze_symbol(symbol, rows, leap_days)
@@ -126,12 +166,13 @@ def main():
     generated_at = datetime.now(timezone.utc).isoformat()
     report = {
         "generatedAt": generated_at,
-        "source": "futu",
+        "source": "futu_hk" if market_code() == "HK" else "futu",
         "config": {
             "leapDays": leap_days,
             "minTotalOptionVolume": config.get("minTotalOptionVolume", 0),
             "minLeapCallVolume": config.get("minLeapCallVolume", 0),
-            "universe": "us_option_volume" if use_option_volume_universe else "us_market" if use_market_universe else "watchlist",
+            "market": market_code(),
+            "universe": f"{market_code().lower()}_option_volume" if use_option_volume_universe else f"{market_code().lower()}_market" if use_market_universe else "watchlist",
             "universeSortField": universe_sort_field if use_market_universe else "",
             "optionScreenContractCount": int(os.getenv("FUTU_OPTION_SCREEN_CONTRACTS", "500")) if use_option_volume_universe else 0,
             "maxExpirations": option_chain_expiration_limit(use_option_volume_universe),
@@ -152,12 +193,13 @@ def main():
     date_stamp = generated_at[:10]
     markdown = build_markdown_report(report)
     html = build_html_report(markdown)
-    (DATA_DIR / "latest-report.json").write_text(
+    latest_report_path().write_text(
         json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     save_report_to_db(report)
-    (REPORTS_DIR / f"{date_stamp}-futu-leap-report.md").write_text(markdown, encoding="utf-8")
-    (REPORTS_DIR / f"{date_stamp}-futu-leap-report.html").write_text(html, encoding="utf-8")
+    report_prefix = "hk-futu-leap-report" if market_code() == "HK" else "futu-leap-report"
+    (REPORTS_DIR / f"{date_stamp}-{report_prefix}.md").write_text(markdown, encoding="utf-8")
+    (REPORTS_DIR / f"{date_stamp}-{report_prefix}.html").write_text(html, encoding="utf-8")
 
     print(f"Futu scan generated {len(records)} qualified records from {len(symbols)} symbols.")
     if errors:
@@ -565,7 +607,7 @@ def build_dollar_volume_universe(quote_ctx, max_symbols):
     sample_limit = int(os.getenv("FUTU_UNIVERSE_SAMPLE_LIMIT", "0"))
     batch_size = int(os.getenv("FUTU_SNAPSHOT_BATCH_SIZE", "300"))
 
-    ret, stocks = quote_ctx.get_stock_basicinfo(Market.US, SecurityType.STOCK)
+    ret, stocks = quote_ctx.get_stock_basicinfo(quote_market(), SecurityType.STOCK)
     if ret != RET_OK:
         raise RuntimeError(f"get_stock_basicinfo failed: {stocks}")
 
@@ -579,7 +621,7 @@ def build_dollar_volume_universe(quote_ctx, max_symbols):
             continue
         if row.get("delisting") is True or row.get("suspension") is True:
             continue
-        if exchange not in {"US_NASDAQ", "US_NYSE", "US_AMEX"}:
+        if market_code() == "US" and exchange not in {"US_NASDAQ", "US_NYSE", "US_AMEX"}:
             continue
         candidates.append(code)
 
@@ -615,7 +657,7 @@ def build_dollar_volume_universe(quote_ctx, max_symbols):
 def build_option_volume_universe(quote_ctx, max_symbols):
     page_count = int(os.getenv("FUTU_OPTION_SCREEN_CONTRACTS", "500"))
     page_count = max(max_symbols, min(page_count, 2000))
-    req = OptionScreenRequest(market_categories=[OptMarketCategory.US_STOCK])
+    req = OptionScreenRequest(market_categories=[option_market_category()])
     req.add_sort(OptIndicator.VOLUME, desc=True)
     req.page_count = page_count
     for field in (
@@ -641,14 +683,16 @@ def build_option_volume_universe(quote_ctx, max_symbols):
     rows = frame_to_records(screen)
     by_symbol = {}
     for row in rows:
-        symbol = option_screen_symbol(row)
+        symbol = option_screen_symbol(row, quote_ctx)
         if not symbol or is_non_single_stock_symbol(symbol):
             continue
+        display_name = option_screen_name(row) or symbol
         volume = number(row.get("volume"))
         bucket = by_symbol.setdefault(
             symbol,
             {
                 "symbol": symbol,
+                "name": display_name,
                 "optionVolume": 0,
                 "optionTurnover": 0,
                 "topContracts": [],
@@ -662,7 +706,7 @@ def build_option_volume_universe(quote_ctx, max_symbols):
     ranked = sorted(by_symbol.values(), key=lambda item: item["optionVolume"], reverse=True)
     for item in ranked[:max_symbols]:
         STOCK_META[item["symbol"]] = {
-            "name": item["symbol"],
+            "name": item.get("name") or item["symbol"],
             "stockOptionVolume": item["optionVolume"],
             "stockOptionTurnover": item["optionTurnover"],
             "topOptionContracts": item["topContracts"],
@@ -675,7 +719,8 @@ def is_non_single_stock_symbol(symbol):
         return False
     normalized = str(symbol or "").upper().strip()
     extra = parse_symbol_set(os.getenv("FUTU_EXCLUDE_OPTION_UNDERLYINGS", ""))
-    return normalized in DEFAULT_NON_SINGLE_STOCK_SYMBOLS or normalized in extra
+    defaults = DEFAULT_NON_SINGLE_HK_SYMBOLS if market_code() == "HK" else DEFAULT_NON_SINGLE_STOCK_SYMBOLS
+    return normalized in defaults or normalized in extra
 
 
 def parse_symbol_set(value):
@@ -686,20 +731,75 @@ def parse_symbol_set(value):
     }
 
 
-def option_screen_symbol(row):
+def option_screen_name(row):
+    name = str(row.get("option_name") or "").strip()
+    if not name:
+        return ""
+    return name.split(" ", 1)[0].strip()
+
+
+def option_screen_symbol(row, quote_ctx=None):
+    code = str(row.get("code") or "")
+    prefix = f"{market_prefix()}."
+    if market_code() == "HK":
+        name_symbol = resolve_hk_option_name(option_screen_name(row), quote_ctx)
+        if name_symbol:
+            return name_symbol
+        if code.startswith(prefix):
+            raw = code.split(".", 1)[1]
+            letters = "".join(ch for ch in raw if ch.isalpha())
+            for length in range(min(len(letters), 4), 1, -1):
+                mapped = HK_OPTION_CODE_FALLBACKS.get(letters[:length])
+                if mapped:
+                    return mapped
+        return ""
+
     name = str(row.get("option_name") or "")
     if name:
         symbol = name.split(" ", 1)[0].strip().upper()
         if symbol:
             return symbol
-    code = str(row.get("code") or "")
-    if code.startswith("US."):
+    if code.startswith(prefix):
         raw = code.split(".", 1)[1]
         for marker in ("2", "1"):
             idx = raw.find(marker)
             if idx > 0:
                 return raw[:idx]
     return ""
+
+
+def resolve_hk_option_name(name, quote_ctx=None):
+    if not name or quote_ctx is None:
+        return ""
+    rows = hk_name_symbols(quote_ctx)
+    exact = [item for item in rows if item["name"] == name]
+    if len(exact) == 1:
+        return exact[0]["symbol"]
+    prefix_matches = [item for item in rows if item["name"].startswith(name) or name.startswith(item["name"])]
+    if len(prefix_matches) == 1:
+        return prefix_matches[0]["symbol"]
+    contains_matches = [item for item in rows if name in item["name"] or item["name"] in name]
+    if len(contains_matches) == 1:
+        return contains_matches[0]["symbol"]
+    return ""
+
+
+def hk_name_symbols(quote_ctx):
+    global HK_NAME_SYMBOLS
+    if HK_NAME_SYMBOLS is not None:
+        return HK_NAME_SYMBOLS
+    ret, stocks = quote_ctx.get_stock_basicinfo(Market.HK, SecurityType.STOCK)
+    if ret != RET_OK:
+        HK_NAME_SYMBOLS = []
+        return HK_NAME_SYMBOLS
+    items = []
+    for row in frame_to_records(stocks):
+        symbol = code_to_symbol(row.get("code", ""))
+        name = str(row.get("name") or "").strip()
+        if symbol and name and row.get("delisting") is not True and row.get("suspension") is not True:
+            items.append({"symbol": symbol, "name": name})
+    HK_NAME_SYMBOLS = items
+    return HK_NAME_SYMBOLS
 
 
 def normalize_option_screen_row(row):
@@ -728,9 +828,12 @@ def parse_option_screen_date(value):
 
 
 def code_to_symbol(code):
-    if not isinstance(code, str) or not code.startswith("US."):
+    prefix = f"{market_prefix()}."
+    if not isinstance(code, str) or not code.startswith(prefix):
         return ""
     symbol = code.split(".", 1)[1]
+    if market_code() == "HK":
+        return symbol if len(symbol) == 5 and symbol.isdigit() else ""
     if not symbol.replace(".", "").replace("-", "").isalpha():
         return ""
     if len(symbol) > 8:
@@ -795,12 +898,12 @@ def normalize_codes(chain):
     for row in frame_to_records(chain):
         for key in ("code", "option_code", "stock_child_type"):
             value = row.get(key)
-            if isinstance(value, str) and value.startswith("US."):
+            if isinstance(value, str) and value.startswith(f"{market_prefix()}."):
                 codes.append(value)
         call_code = row.get("call_code") or row.get("call")
         put_code = row.get("put_code") or row.get("put")
         for value in (call_code, put_code):
-            if isinstance(value, str) and value.startswith("US."):
+            if isinstance(value, str) and value.startswith(f"{market_prefix()}."):
                 codes.append(value)
     return sorted(set(codes))
 
@@ -1047,8 +1150,15 @@ def infer_option_type(row):
     return ""
 
 
-def to_futu_us_code(symbol):
-    return symbol if symbol.startswith("US.") else f"US.{symbol}"
+def to_futu_code(symbol):
+    text = str(symbol or "").upper().strip()
+    prefix = f"{market_prefix()}."
+    if text.startswith(prefix):
+        return text
+    if market_code() == "HK":
+        digits = "".join(ch for ch in text if ch.isdigit())
+        return f"HK.{digits.zfill(5)}"
+    return f"US.{text}"
 
 
 def score_record(leap_ratio, cp_ratio, call_share, premium_flow, leap_call_volume, leap_call_oi):

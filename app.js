@@ -122,6 +122,7 @@ const els = {
   searchInput: document.querySelector("#searchInput"),
   resetData: document.querySelector("#resetData"),
   loadAutoReport: document.querySelector("#loadAutoReport"),
+  loadHkReport: document.querySelector("#loadHkReport"),
   avgLeap: document.querySelector("#avgLeap"),
   avgCp: document.querySelector("#avgCp"),
   streakCount: document.querySelector("#streakCount"),
@@ -167,9 +168,9 @@ function saveRecords() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
 }
 
-async function loadGeneratedReport({ silent = false } = {}) {
+async function loadGeneratedReport({ silent = false, market = "US" } = {}) {
   try {
-    const response = await fetch("data/latest-report.json", { cache: "no-store" });
+    const response = await fetch(market === "HK" ? "data/latest-hk-report.json" : "data/latest-report.json", { cache: "no-store" });
     if (!response.ok) throw new Error("没有找到自动扫描报告");
     const report = await response.json();
     if (!Array.isArray(report.records)) throw new Error("报告格式不正确");
@@ -178,7 +179,7 @@ async function loadGeneratedReport({ silent = false } = {}) {
     selectedTicker = records[0]?.ticker || "";
     saveRecords();
     renderAll();
-    if (!silent) alert(`已载入自动扫描报告：${records.length} 条记录`);
+    if (!silent) alert(`已载入${market === "HK" ? "港股" : "美股"}期权异动报告：${records.length} 条记录`);
   } catch (error) {
     if (!silent) alert(`读取失败：${error.message}。请先运行 npm run scan:futu，并通过 npm start 打开网页。`);
   }
@@ -900,6 +901,7 @@ function renderAiAnalysis(record, ai) {
   const plan = ai.stockTradePlan || {};
   const industry = ai.industryResearch || {};
   const flow = ai.optionFlowRead || {};
+  const futuBrief = ai.futuStyleBrief || {};
   return `
     <section class="ai-panel">
       <div class="section-head">
@@ -915,6 +917,7 @@ function renderAiAnalysis(record, ai) {
         <article><span>估值预期</span><strong>${ai.valuationExpectation?.verdict || "-"}</strong><small>不编造估值数字</small></article>
         <article><span>研究深度</span><strong>${industry.level || "-"}</strong><small>产业链覆盖度</small></article>
       </div>
+      ${renderFutuStyleBrief(futuBrief)}
       <h4>AI 对期权资金流的解读</h4>
       <p>${flow.summary || "暂无 AI 解读。"}</p>
       ${renderList("异常证据", flow.abnormalEvidence)}
@@ -935,6 +938,30 @@ function renderAiAnalysis(record, ai) {
       ${renderList("下一步研究", ai.nextResearchTasks)}
     </section>
   `;
+}
+
+function renderFutuStyleBrief(brief) {
+  if (!brief || !Object.keys(brief).length) return "";
+  return `
+    <div class="futu-brief">
+      <div class="futu-brief-head">
+        <span>异动速读</span>
+        <strong>${brief.headline || "期权异动结构解读"}</strong>
+        <small>confidence ${brief.confidence ?? "-"}</small>
+      </div>
+      ${renderBriefBlock("背景/催化", brief.openingContext)}
+      ${renderBriefBlock("板块与同行", brief.sectorAndPeers)}
+      ${renderBriefBlock("期权成交", brief.optionTape)}
+      ${renderBriefBlock("波动率与持仓", brief.volatilityAndPositioning)}
+      ${renderBriefBlock("解读", brief.interpretation)}
+      ${renderList("观察项", brief.watchItems)}
+    </div>
+  `;
+}
+
+function renderBriefBlock(title, body) {
+  if (!body) return "";
+  return `<article class="brief-block"><span>${title}</span><p>${body}</p></article>`;
 }
 
 function renderAiUnavailable() {
@@ -1092,6 +1119,9 @@ els.resetData.addEventListener("click", () => {
 
 els.loadAutoReport.addEventListener("click", () => {
   loadGeneratedReport();
+});
+els.loadHkReport?.addEventListener("click", () => {
+  loadGeneratedReport({ market: "HK" });
 });
 
 els.refreshHistory?.addEventListener("click", renderHistoryReports);

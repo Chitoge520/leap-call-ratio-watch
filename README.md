@@ -1,16 +1,16 @@
 # LEAP Call Ratio Watch
 
-本项目是一个本地运行的美股期权异动研究系统。主流程使用 Futu OpenD 扫描美股市场中“单独股票”的期权成交量异动 Top5，生成股票研究报告，并用正股价格做 20 / 60 / 120 个交易日收益回测。
+本项目是一个本地运行的股票期权异动研究系统。主流程使用 Futu OpenD 扫描美股市场中“单独股票”的期权成交量异动 Top5，生成股票研究报告，并用正股价格做 20 / 60 / 120 个交易日收益回测；同时支持港股市场的单独股票期权异动 Top5 扫描和 AI 研究报告。
 
 期权只作为资金流和研究线索，不输出期权买卖建议。回测验证的是正股买卖表现，不是期权合约收益。
 
 ## 核心功能
 
-- 期权成交量 Top5：使用 Futu `get_option_screen(OptMarketCategory.US_STOCK)` 按期权合约成交量扫描，再聚合到股票维度。
+- 期权成交量 Top5：美股使用 Futu `get_option_screen(OptMarketCategory.US_STOCK)`，港股使用 `get_option_screen(OptMarketCategory.HK_STOCK)`，按期权合约成交量扫描，再聚合到股票维度。
 - 指数/ETF 剔除：默认排除 `SPY`、`QQQ`、`IWM`、`DIA`、`TQQQ`、`SQQQ`、`SPX`、`NDX`、`RUT`、`VIX` 等指数或 ETF 相关期权。
 - 远月合约验证：正式期权成交量扫描会额外抓取 LEAP 到期日，避免只看到当日或近月合约。
 - AI 研究报告：用 OpenAI Responses API 生成五段式个股研究；没有 API key 时会标记 `aiStatus.skipped`，前端展示本地规则分析和缺口提示。
-- 盘后自动任务：`npm start` 常驻服务会在美东 `16:30` 检查 OpenD 和美股交易日，满足条件后自动扫描、分析并增量回测。
+- 盘后自动任务：`npm start` 常驻服务会在美东 `16:30` 检查 OpenD 和美股交易日，满足条件后自动扫描、分析并增量回测；也会在香港时间 `16:30` 检查港股交易日并自动生成港股期权异动报告。
 - 盘前正股确认：在美东 `08:30` 自动拉取当前 Top5 的正股盘前/最新快照，并重新运行 AI 分析，把盘前涨跌幅、成交量和市场状态加入报告。
 - 正股回测：对每天 Top5 信号，使用 Futu 日线计算扫描日后第 20 / 60 / 120 个美股交易日的正股收益。
 - Web 展示：包含异常榜、AI 研究报告、历史报告、Backtest 汇总/明细、任务状态和数据导入导出。
@@ -86,6 +86,20 @@ npm run premarket:futu
 npm run premarket:futu:ai
 ```
 
+如果想手动执行一次港股期权异动 Top5 扫描 + AI 分析：
+
+```bash
+npm run daily:futu:hk
+```
+
+这个命令会生成：
+
+```text
+data/latest-hk-report.json
+reports/YYYY-MM-DD-hk-futu-leap-report.md
+reports/YYYY-MM-DD-hk-futu-leap-report.html
+```
+
 ## Futu 扫描模式
 
 ### 期权成交量 Top5
@@ -97,6 +111,14 @@ npm run scan:futu:volume
 这是当前推荐模式。它按全市场期权合约成交量取前 `FUTU_OPTION_SCREEN_CONTRACTS=500` 个合约，再按 ticker 聚合成单独股票 Top5。
 
 Top5 全部进入报告。LEAP 阈值只用于标签、评分和回测分组，不再过滤展示。
+
+### 港股期权成交量 Top5
+
+```bash
+npm run scan:futu:hk-volume
+```
+
+该模式设置 `FUTU_MARKET=HK`，使用 `OptMarketCategory.HK_STOCK` 扫描港股期权合约成交量，再按 `00700`、`09988` 这类港股正股代码聚合为 Top5。默认剔除港股 ETF/指数相关代码，例如 `02800`、`02828`、`03033`、`03188`、`07200`、`07500` 等。
 
 ### 高成交额股票池
 
@@ -140,15 +162,30 @@ AUTO_SCAN_ENABLED=1
 AUTO_SCAN_TIME_ET=16:30
 AUTO_PREMARKET_ENABLED=1
 AUTO_PREMARKET_TIME_ET=08:30
+AUTO_PREMARKET_PROTECT_MINUTES=90
+AUTO_HK_SCAN_ENABLED=1
+AUTO_HK_SCAN_TIME_HKT=16:30
+AUTO_JOB_RETRY_MINUTES=60
 
 FUTU_OPTION_SCREEN_CONTRACTS=500
 FUTU_MAX_SYMBOLS=5
+FUTU_HK_OPTION_SCREEN_CONTRACTS=500
+FUTU_HK_MAX_SYMBOLS=5
 FUTU_MIN_EXPIRATIONS_OPTION_VOLUME=12
 FUTU_LEAP_EXPIRATIONS_OPTION_VOLUME=8
 
 FUTU_INCLUDE_ETF_OPTIONS=0
 FUTU_EXCLUDE_OPTION_UNDERLYINGS=SPY,QQQ,IWM,DIA,TQQQ,SQQQ,SPX,SPXW,NDX,RUT,VIX
 ```
+
+港股自动任务使用香港时间：
+
+- `AUTO_HK_SCAN_ENABLED=1`：`npm start` 常驻时启用港股盘后期权异动扫描。
+- `AUTO_HK_SCAN_TIME_HKT=16:30`：港股收盘后触发时间。
+- `AUTO_JOB_RETRY_MINUTES=60`：自动流水线失败后的冷却时间，避免 AI 临时失败时反复扫描并覆盖报告。
+- `AUTO_PREMARKET_PROTECT_MINUTES=90`：美股盘前任务前 90 分钟内，不补跑逾期港股任务，避免占用调度器。
+- `FUTU_HK_OPTION_SCREEN_CONTRACTS=500`：港股期权成交量筛选时读取的合约数量。
+- `FUTU_HK_MAX_SYMBOLS=5`：港股报告保留的正股 TopN。
 
 远月合约相关参数：
 
@@ -162,6 +199,12 @@ OPENAI_API_KEY=your_api_key
 OPENAI_MODEL=gpt-4.1-mini
 OPENAI_BASE_URL=https://api.openai.com/v1
 OPENAI_USE_RESPONSES=1
+OPENAI_RETRY_ATTEMPTS=3
+OPENAI_RETRY_DELAY_MS=15000
+OPENAI_MAX_OUTPUT_TOKENS=2400
+AI_DAILY_SUMMARY_MODE=local
+AI_OPTION_CHAIN_SAMPLE_LIMIT=0
+AI_USAGE_LOG_PATH=logs/ai-usage.jsonl
 STOCK_AGENT_PRESET=tradingagents
 STOCK_AGENT_REFERENCE=TauricResearch/TradingAgents
 ```
@@ -170,7 +213,7 @@ DeepSeek 配置示例：
 
 ```text
 OPENAI_API_KEY=your_deepseek_api_key
-OPENAI_MODEL=deepseek-v4-pro
+OPENAI_MODEL=deepseek-v4-flash
 OPENAI_BASE_URL=https://api.deepseek.com
 OPENAI_USE_RESPONSES=0
 STOCK_AGENT_PRESET=tradingagents
@@ -194,6 +237,8 @@ STOCK_AGENT_REFERENCE=TauricResearch/TradingAgents
 
 当前 AI 层接入的是 TradingAgents-style 多角色研究结构，参考开源项目 `TauricResearch/TradingAgents` 的分析师、研究员、交易员、风控和组合经理分工。项目不会直接安装或运行完整 TradingAgents Python 框架，而是在现有 `npm run analyze:ai` 里用 DeepSeek/OpenAI-compatible API 模拟同样的研究委员会结构，并把结论写入 Web 报告。
 
+AI 报告会先生成一段“期权异动资讯流”风格的 `futuStyleBrief`：先交代市场/事件背景，再连接板块和同行，随后拆解期权成交、Put/Call、成交/持仓、权利金、到期日/行权价集中度、LEAP 与近端合约差异，以及 IV/波动率数据是否可用。缺少新闻、估值或 IV 百分位时必须写入 unknown 或 `missingData`，不得编造。
+
 每个 Top5 标的仍然固定回答 5 个问题：
 
 1. 是否属于当前市场主线。
@@ -216,6 +261,24 @@ STOCK_AGENT_REFERENCE=TauricResearch/TradingAgents
 - 优先基于 Futu 数据、期权成交量、OI、权利金、合约结构和正股表现。
 - 不能确认的内容必须标记 unknown 或写入 `missingData`。
 - 期权只作为资金流证据，不提供期权买卖建议。
+
+### 降低 AI 成本
+
+默认配置已经按低 token 消耗优化：
+
+- `AI_DAILY_SUMMARY_MODE=local`：日度总览由本地聚合生成，不额外调用一次大模型。需要模型写组合层总结时可改为 `ai`。
+- `AI_OPTION_CHAIN_SAMPLE_LIMIT=0`：AI 只接收聚合指标和 Top 合约，不发送完整期权链样本。需要让模型看原始链样本时可设为 `8` 或 `12`。
+- `OPENAI_MAX_OUTPUT_TOKENS=2400`：限制单只股票输出长度；当前 schema 已精简，通常不会触顶。
+- `AI_USAGE_LOG_PATH=logs/ai-usage.jsonl`：记录每次 AI 调用的模型、阶段、ticker、耗时、真实 token usage 和估算 token，便于检查消耗。
+
+完整期权链仍保存在本地 JSON、SQLite 和 Web 期权链表格里，只是不再默认发送给 DeepSeek。
+
+查看最近 AI 消耗：
+
+```powershell
+Get-Content logs\ai-usage.jsonl -Tail 20 | ConvertFrom-Json |
+  Select-Object timestamp,stage,ticker,status,totalTokens,promptTokens,completionTokens,estimatedInputTokens,estimatedOutputTokens,durationMs
+```
 
 ## 盘后自动任务
 
@@ -323,6 +386,7 @@ reports
 
 ```text
 data/latest-report.json
+data/latest-hk-report.json
 ```
 
 历史报告：
@@ -330,6 +394,8 @@ data/latest-report.json
 ```text
 reports/YYYY-MM-DD-futu-leap-report.md
 reports/YYYY-MM-DD-futu-leap-report.html
+reports/YYYY-MM-DD-hk-futu-leap-report.md
+reports/YYYY-MM-DD-hk-futu-leap-report.html
 ```
 
 ## Web 页面
