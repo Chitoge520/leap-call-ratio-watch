@@ -725,6 +725,236 @@ tbody tr:hover {
   margin-bottom: 18px;
 }
 
+.cn-strategy-panel {
+  margin-bottom: 18px;
+  padding: 18px;
+  border: 1px solid #263548;
+  border-radius: 8px;
+  background: #0d1724;
+  color: #e6edf5;
+  box-shadow: 0 18px 40px rgba(4, 10, 18, 0.18);
+}
+
+.cn-strategy-panel .section-head {
+  color: #e6edf5;
+}
+
+.cn-strategy-panel .section-head span,
+.cn-strategy-panel .eyebrow {
+  color: #8ea2b8;
+}
+
+.strategy-table-wrap {
+  overflow: auto;
+  border: 1px solid #25354a;
+  border-radius: 8px;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    #101b2a;
+  background-size: 18px 18px;
+}
+
+.strategy-table {
+  min-width: 1440px;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  color: #e9f1f8;
+}
+
+.strategy-table th,
+.strategy-table td {
+  padding: 8px 10px;
+  border-right: 1px solid #223146;
+  border-bottom: 1px solid #223146;
+  white-space: nowrap;
+}
+
+.strategy-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #162337;
+  color: #f2f6fb;
+  font-weight: 800;
+}
+
+.strategy-table tbody tr:hover {
+  background: rgba(78, 116, 156, 0.18);
+}
+
+.strategy-main-row {
+  cursor: pointer;
+}
+
+.strategy-main-row.expanded {
+  background: rgba(47, 78, 115, 0.28);
+}
+
+.strategy-detail-row td {
+  padding: 0;
+  background: #0b1420;
+}
+
+.strategy-detail-card {
+  display: grid;
+  grid-template-columns: minmax(360px, 1.2fr) minmax(320px, 0.9fr) minmax(300px, 0.9fr);
+  gap: 14px;
+  padding: 16px;
+  border-top: 1px solid #334963;
+  background:
+    linear-gradient(135deg, rgba(42, 68, 96, 0.32), rgba(10, 18, 29, 0.82)),
+    #0e1826;
+}
+
+.strategy-detail-card section {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #2a3c55;
+  border-radius: 8px;
+  background: rgba(17, 29, 45, 0.92);
+}
+
+.strategy-detail-card h4 {
+  margin: 0 0 10px;
+  color: #f2f6fb;
+  font-size: 14px;
+}
+
+.strategy-detail-card p,
+.strategy-detail-card li {
+  color: #cbd8e5;
+  line-height: 1.65;
+}
+
+.strategy-detail-card ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.strategy-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.strategy-detail-grid article {
+  padding: 10px;
+  border: 1px solid #31455e;
+  border-radius: 8px;
+  background: #132236;
+}
+
+.strategy-detail-grid span {
+  display: block;
+  color: #8ea2b8;
+  font-size: 12px;
+}
+
+.strategy-detail-grid strong {
+  display: block;
+  margin-top: 4px;
+  color: #f4f8fc;
+}
+
+.strategy-score-bars {
+  display: grid;
+  gap: 9px;
+}
+
+.strategy-score-bar {
+  display: grid;
+  grid-template-columns: 72px 1fr 52px;
+  gap: 8px;
+  align-items: center;
+}
+
+.strategy-score-bar span {
+  color: #b8c8d8;
+  font-size: 12px;
+}
+
+.strategy-score-bar div {
+  height: 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #223247;
+}
+
+.strategy-score-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #4bb07d, #f3b64b);
+}
+
+.strategy-score-bar strong {
+  color: #f4f8fc;
+  text-align: right;
+}
+
+.strategy-tech-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.strategy-tech-list span {
+  padding: 7px 9px;
+  border: 1px solid #31455e;
+  border-radius: 8px;
+  background: #101d2e;
+  color: #d9e4ee;
+  font-size: 12px;
+}
+
+.strategy-invalidation {
+  margin: 10px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid #31455e;
+}
+
+.strategy-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 22px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  font-weight: 800;
+  line-height: 1.2;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24), 0 1px 8px rgba(0, 0, 0, 0.16);
+}
+
+.strategy-pill.neutral {
+  background: linear-gradient(180deg, #607588, #405365);
+  color: #f8fbff;
+}
+
+.strategy-pill.orange,
+.strategy-pill.gold {
+  background: linear-gradient(180deg, #f2a13a, #b95d12);
+  color: #fff7dd;
+}
+
+.strategy-pill.cream {
+  background: linear-gradient(180deg, #fff6cf, #f1d58c);
+  color: #a34b1d;
+}
+
+.strategy-pill.green {
+  background: linear-gradient(180deg, #dff8df, #93d9a1);
+  color: #09633c;
+}
+
+.strategy-pill.red {
+  background: linear-gradient(180deg, #ef6f5f, #a8231c);
+  color: #fff7f1;
+}
+
 .cn-index-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }

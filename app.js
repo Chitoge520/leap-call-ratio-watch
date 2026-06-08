@@ -115,6 +115,7 @@ let sortKey = "score";
 let selectedTicker = records[0]?.ticker || "";
 let topOptionAlerts = [];
 let cnReview = null;
+let expandedStrategyCode = "";
 
 const els = {
   pageTitle: document.querySelector("#pageTitle"),
@@ -155,6 +156,7 @@ const els = {
   refreshCnReview: document.querySelector("#refreshCnReview"),
   cnReviewHeadline: document.querySelector("#cnReviewHeadline"),
   cnReviewMeta: document.querySelector("#cnReviewMeta"),
+  cnStrategyRows: document.querySelector("#cnStrategyRows"),
   cnIndexGrid: document.querySelector("#cnIndexGrid"),
   cnThemeGrid: document.querySelector("#cnThemeGrid"),
   cnPlaybook: document.querySelector("#cnPlaybook"),
@@ -370,6 +372,7 @@ function renderCnReview() {
     </article>
   `;
 
+  renderStrategyBoard(cnReview.strategyCandidates || []);
   renderCnRows(els.cnLeaderRows, (cnReview.leaders || []).slice(0, 12));
   renderCnRows(els.cnActiveRows, (cnReview.activeTurnover || []).slice(0, 12));
   els.cnDataGaps.innerHTML = renderCnList(cnReview.dataGaps);
@@ -382,9 +385,162 @@ function renderCnReviewError(message) {
   if (els.cnIndexGrid) els.cnIndexGrid.innerHTML = "";
   if (els.cnThemeGrid) els.cnThemeGrid.innerHTML = "";
   if (els.cnPlaybook) els.cnPlaybook.innerHTML = "";
+  if (els.cnStrategyRows) els.cnStrategyRows.innerHTML = `<tr><td colspan="20">${message}</td></tr>`;
   if (els.cnLeaderRows) els.cnLeaderRows.innerHTML = `<tr><td colspan="5">${message}</td></tr>`;
   if (els.cnActiveRows) els.cnActiveRows.innerHTML = `<tr><td colspan="5">${message}</td></tr>`;
   if (els.cnDataGaps) els.cnDataGaps.innerHTML = "";
+}
+
+function renderStrategyBoard(rows) {
+  if (!els.cnStrategyRows) return;
+  const visible = Array.isArray(rows) ? rows.slice(0, 10) : [];
+  els.cnStrategyRows.innerHTML = visible.length
+    ? visible.map((row, index) => `
+      <tr class="strategy-main-row ${expandedStrategyCode === row.code ? "expanded" : ""}" data-code="${row.code}">
+        <td>${index + 1}</td>
+        <td><strong>${row.code || "-"}</strong></td>
+        <td>${row.name || "-"}</td>
+        <td>${strategyPill(row.theme || "-", "neutral")}</td>
+        <td>${strategyPill(row.signalLight || "-", signalTone(row.signalLight))}</td>
+        <td>${strategyPill(row.stockState || "-", stockStateTone(row.stockState))}</td>
+        <td>${strategyPill(row.pivotStage || "-", pivotStageTone(row.pivotStage))}</td>
+        <td>${strategyPill(row.buyPointType || "-", buyPointTone(row.buyPointType))}</td>
+        <td>${strategyPill(row.buyPointGrade || "-", "cream")}</td>
+        <td>${strategyPill(row.actionState || "-", actionTone(row.actionState))}</td>
+        <td>${strategyPill(row.buyPointQuality || "-", qualityTone(row.buyPointQuality))}</td>
+        <td>${number(row.commentScore).toFixed(1)}</td>
+        <td>${strategyPill(row.rating || "-", row.rating?.startsWith("A") ? "red" : "orange")}</td>
+        <td>${row.selected ? "入选" : "-"}</td>
+        <td>${number(row.totalScore).toFixed(1)}</td>
+        <td>${number(row.rs).toFixed(1)}</td>
+        <td>${number(row.pivotScore).toFixed(1)}</td>
+        <td>${formatPct(row.distanceToPivotPct, 1)}</td>
+        <td>${row.financialQuality || "-"}</td>
+        <td>${row.earlyVcp || "-"}</td>
+      </tr>
+      ${expandedStrategyCode === row.code ? renderStrategyDetailRow(row) : ""}
+    `).join("")
+    : `<tr><td colspan="20">暂无策略候选。请重新运行 <code>npm run review:cn</code> 生成包含技术面指标的复盘。</td></tr>`;
+
+  document.querySelectorAll(".strategy-main-row[data-code]").forEach((row) => {
+    row.addEventListener("click", () => {
+      expandedStrategyCode = expandedStrategyCode === row.dataset.code ? "" : row.dataset.code;
+      renderStrategyBoard(rows);
+    });
+  });
+}
+
+function renderStrategyDetailRow(row) {
+  const decision = row.strategyDecision || {};
+  const scores = decision.scores || {};
+  const technical = row.technical || {};
+  const entry = decision.entryZone || {};
+  return `
+    <tr class="strategy-detail-row">
+      <td colspan="20">
+        <div class="strategy-detail-card">
+          <section>
+            <h4>TradingAgents 决策</h4>
+            <div class="strategy-detail-grid">
+              <article><span>决策</span><strong>${decision.decision || "-"}</strong></article>
+              <article><span>市场门控</span><strong>${decision.marketRegime || "-"}</strong></article>
+              <article><span>入场区</span><strong>${formatPrice(entry.low)} - ${formatPrice(entry.high)}</strong></article>
+              <article><span>止损</span><strong>${formatPrice(decision.stopLoss)}</strong></article>
+              <article><span>目标</span><strong>${formatPrice(decision.takeProfit)}</strong></article>
+              <article><span>仓位</span><strong>${number(decision.positionWeightPct).toFixed(1)}%</strong></article>
+            </div>
+          </section>
+          <section>
+            <h4>分项得分</h4>
+            <div class="strategy-score-bars">
+              ${renderScoreBar("消息/主题", scores.newsTheme)}
+              ${renderScoreBar("技术面", scores.technical)}
+              ${renderScoreBar("买点", scores.buyPoint)}
+              ${renderScoreBar("市场", scores.market)}
+              ${renderScoreBar("风险扣分", scores.riskPenalty, true)}
+            </div>
+          </section>
+          <section>
+            <h4>技术读数</h4>
+            <div class="strategy-tech-list">
+              <span>MA20 ${formatPrice(technical.ma20)}</span>
+              <span>MA60 ${formatPrice(technical.ma60)}</span>
+              <span>RSI ${number(technical.rsi14).toFixed(1)}</span>
+              <span>MACD柱 ${number(technical.macdHist).toFixed(3)}</span>
+              <span>量比 ${number(technical.volumeRatio).toFixed(1)}</span>
+              <span>ATR ${formatPrice(technical.atr14)}</span>
+            </div>
+          </section>
+          <section>
+            <h4>买入条件</h4>
+            ${renderCnList(decision.buyConditions)}
+          </section>
+          <section>
+            <h4>卖出/降级条件</h4>
+            ${renderCnList(decision.sellConditions)}
+          </section>
+          <section>
+            <h4>风险标记</h4>
+            ${renderCnList(decision.riskFlags)}
+            <p class="strategy-invalidation">${decision.invalidation || ""}</p>
+          </section>
+        </div>
+      </td>
+    </tr>
+  `;
+}
+
+function renderScoreBar(label, value, inverse = false) {
+  const score = Math.max(0, Math.min(number(value), 100));
+  return `
+    <div class="strategy-score-bar">
+      <span>${label}</span>
+      <div><i style="width:${score}%"></i></div>
+      <strong class="${inverse && score > 20 ? "negative" : ""}">${score.toFixed(1)}</strong>
+    </div>
+  `;
+}
+
+function strategyPill(label, tone) {
+  return `<span class="strategy-pill ${tone || "neutral"}">${label}</span>`;
+}
+
+function signalTone(label) {
+  if (/金钻|突破|触发|达标/.test(label || "")) return "orange";
+  if (/观察|回踩|待破/.test(label || "")) return "gold";
+  if (/过滤|弱势/.test(label || "")) return "red";
+  return "neutral";
+}
+
+function stockStateTone(label) {
+  if (/主升|右侧|强势/.test(label || "")) return "gold";
+  if (/高位|下方/.test(label || "")) return "red";
+  return "neutral";
+}
+
+function pivotStageTone(label) {
+  if (/VCP|首次|回踩/.test(label || "")) return "orange";
+  if (/延伸/.test(label || "")) return "red";
+  return "neutral";
+}
+
+function buyPointTone(label) {
+  if (/突破|VCP/.test(label || "")) return "orange";
+  if (/回踩/.test(label || "")) return "green";
+  if (/延伸/.test(label || "")) return "red";
+  return "neutral";
+}
+
+function actionTone(label) {
+  if (/可执行/.test(label || "")) return "green";
+  if (/等待|观察/.test(label || "")) return "orange";
+  return "red";
+}
+
+function qualityTone(label) {
+  if (/A\+|A/.test(label || "")) return "green";
+  if (/过热|C/.test(label || "")) return "red";
+  return "orange";
 }
 
 function renderCnRows(target, rows) {
