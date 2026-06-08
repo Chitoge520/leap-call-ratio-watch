@@ -4,13 +4,15 @@ import os
 from datetime import date, datetime
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[1]
+FUTU_APPDATA = os.getenv("FUTU_APPDATA") or str(ROOT / ".futu-appdata")
+os.environ["APPDATA"] = FUTU_APPDATA
+os.environ["appdata"] = FUTU_APPDATA
+
 try:
     from futu import Market, OpenQuoteContext, RET_OK
 except ImportError as exc:
     raise SystemExit("Missing futu-api. Install it with: pip install -r requirements-futu.txt") from exc
-
-
-ROOT = Path(__file__).resolve().parents[1]
 
 
 def main():

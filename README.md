@@ -1,6 +1,6 @@
 # LEAP Call Ratio Watch
 
-本项目是一个本地运行的股票期权异动研究系统。主流程使用 Futu OpenD 扫描美股市场中“单独股票”的期权成交量异动 Top5，生成股票研究报告，并用正股价格做 20 / 60 / 120 个交易日收益回测；同时支持港股市场的单独股票期权异动 Top5 扫描和 AI 研究报告。
+本项目是一个本地运行的股票期权异动研究系统。主流程使用 Futu OpenD 扫描美股市场中“单独股票”的期权成交量异动 Top5，生成股票研究报告；同时支持港股市场的单独股票期权异动 Top5 扫描和 AI 研究报告。回测功能目前已暂停。
 
 期权只作为资金流和研究线索，不输出期权买卖建议。回测验证的是正股买卖表现，不是期权合约收益。
 
@@ -10,10 +10,10 @@
 - 指数/ETF 剔除：默认排除 `SPY`、`QQQ`、`IWM`、`DIA`、`TQQQ`、`SQQQ`、`SPX`、`NDX`、`RUT`、`VIX` 等指数或 ETF 相关期权。
 - 远月合约验证：正式期权成交量扫描会额外抓取 LEAP 到期日，避免只看到当日或近月合约。
 - AI 研究报告：用 OpenAI Responses API 生成五段式个股研究；没有 API key 时会标记 `aiStatus.skipped`，前端展示本地规则分析和缺口提示。
-- 盘后自动任务：`npm start` 常驻服务会在美东 `16:30` 检查 OpenD 和美股交易日，满足条件后自动扫描、分析并增量回测；也会在香港时间 `16:30` 检查港股交易日并自动生成港股期权异动报告。
+- 盘后自动任务：`npm start` 常驻服务会在美东 `16:30` 检查 OpenD 和美股交易日，满足条件后自动扫描并分析；也会在香港时间 `16:30` 检查港股交易日并自动生成港股期权异动报告。
 - 盘前正股确认：在美东 `08:30` 自动拉取当前 Top5 的正股盘前/最新快照，并重新运行 AI 分析，把盘前涨跌幅、成交量和市场状态加入报告。
-- 正股回测：对每天 Top5 信号，使用 Futu 日线计算扫描日后第 20 / 60 / 120 个美股交易日的正股收益。
-- Web 展示：包含异常榜、AI 研究报告、历史报告、Backtest 汇总/明细、任务状态和数据导入导出。
+- 正股回测：功能代码保留，但当前默认暂停，不再自动生成新回测样本。
+- Web 展示：包含异常榜、AI 研究报告、历史报告、任务状态和数据导入导出。
 
 ## 快速启动
 
@@ -53,7 +53,7 @@ npm run daily:futu
 这个命令会依次执行：
 
 ```text
-scan:futu:volume -> analyze:ai -> backtest:futu
+scan:futu:volume -> analyze:ai
 ```
 
 如果只想扫描期权成交量 Top5：
@@ -62,11 +62,7 @@ scan:futu:volume -> analyze:ai -> backtest:futu
 npm run scan:futu:volume
 ```
 
-如果只想补跑回测：
-
-```bash
-npm run backtest:futu
-```
+回测功能目前暂停，`npm run backtest:futu` 只会输出禁用提示。
 
 如果只想运行 AI 分析：
 
@@ -98,6 +94,20 @@ npm run daily:futu:hk
 data/latest-hk-report.json
 reports/YYYY-MM-DD-hk-futu-leap-report.md
 reports/YYYY-MM-DD-hk-futu-leap-report.html
+```
+
+如果想生成 A 股全面复盘：
+
+```bash
+npm run review:cn
+```
+
+这个命令会通过 Futu OpenD 抓取沪深 A 股快照，生成指数结构、市场宽度、成交额、情绪温度、主题强度、领涨/领跌、高成交额股票和次日观察清单：
+
+```text
+data/latest-cn-review.json
+reports/YYYY-MM-DD-cn-market-review.md
+reports/YYYY-MM-DD-cn-market-review.html
 ```
 
 ## Futu 扫描模式
@@ -207,6 +217,8 @@ AI_OPTION_CHAIN_SAMPLE_LIMIT=0
 AI_USAGE_LOG_PATH=logs/ai-usage.jsonl
 STOCK_AGENT_PRESET=tradingagents
 STOCK_AGENT_REFERENCE=TauricResearch/TradingAgents
+DEEPSEEK_BALANCE_ENABLED=1
+DEEPSEEK_BALANCE_CACHE_MS=300000
 ```
 
 DeepSeek 配置示例：
@@ -280,6 +292,15 @@ Get-Content logs\ai-usage.jsonl -Tail 20 | ConvertFrom-Json |
   Select-Object timestamp,stage,ticker,status,totalTokens,promptTokens,completionTokens,estimatedInputTokens,estimatedOutputTokens,durationMs
 ```
 
+DeepSeek 余额监控：
+
+```text
+/api/deepseek/balance
+/api/deepseek/balance?force=1
+```
+
+`npm start` 会在后台按 `DEEPSEEK_BALANCE_CACHE_MS` 缓存查询 DeepSeek 官方 `/user/balance` 接口，并在首页任务状态面板展示余额和最近检查时间。该接口只在后端使用 `OPENAI_API_KEY`，不会把 key 暴露给前端。
+
 ## 盘后自动任务
 
 `npm start` 会启动 Web 服务、盘前任务和盘后任务。盘后默认逻辑：
@@ -288,7 +309,7 @@ Get-Content logs\ai-usage.jsonl -Tail 20 | ConvertFrom-Json |
 2. 检查 Futu OpenD 是否连接。
 3. 使用 Futu 交易日接口跳过美股休市日。
 4. 执行 `daily:futu` 流水线。
-5. 成功后写入最新报告和回测信号。
+5. 成功后写入最新报告。回测当前暂停，不写入新回测信号。
 
 任务状态 API：
 
@@ -325,9 +346,9 @@ premarket:futu -> analyze:ai
 }
 ```
 
-## 回测
+## 回测（暂停）
 
-回测只验证正股收益，不验证期权收益。
+回测功能当前暂停。历史表和脚本保留，但自动任务不会运行回测，扫描也不会写入新的回测信号。
 
 默认收益口径：
 
@@ -336,34 +357,13 @@ entry = 扫描日正股收盘价
 exit = 之后第 20 / 60 / 120 个美股交易日收盘价
 ```
 
-运行：
+当前暂停运行：
 
 ```bash
 npm run backtest:futu
 ```
 
-样本不足完整周期时标记为 `pending`，不会纳入已完成统计。
-
-Web Backtest 页面展示：
-
-- 样本数
-- 胜率
-- 平均收益
-- 中位数收益
-- 最大回撤
-- 20 / 60 / 120 日分组
-- LEAP 达标/未达标分组
-- Call 主导/Put 主导分组
-- Score 分层
-- 单票明细
-
-回测 API：
-
-```text
-/api/backtest/summary
-/api/backtest/signals
-/api/backtest/ticker?ticker=NVDA
-```
+该命令目前只输出 `Backtest is temporarily disabled.`。历史表和脚本仍保留，后续需要时可以恢复。
 
 ## 数据表
 
@@ -376,9 +376,9 @@ data/leap_watch.db
 核心表：
 
 ```text
-stock_price_bars
-backtest_signals
-backtest_results
+stock_price_bars        # 历史保留，当前暂停写入
+backtest_signals        # 历史保留，当前暂停写入
+backtest_results        # 历史保留，当前暂停写入
 reports
 ```
 
@@ -404,7 +404,7 @@ reports/YYYY-MM-DD-hk-futu-leap-report.html
 
 - 异常榜：展示期权成交量 Top5、来源合约、评分和任务状态。
 - 研究报告：展示 AI 五段式研究、本地规则分析、数据缺口和后续研究任务。
-- Backtest：展示策略汇总和单票明细。
+- Backtest：当前暂停，Web 入口已隐藏。
 - 历史查询：加载历史扫描报告，查询单票历史信号。
 - 数据录入：手动新增观察记录，支持 JSON 导入/导出。
 - 监控框架：展示研究流程和风险提示。
@@ -416,9 +416,7 @@ reports/YYYY-MM-DD-hk-futu-leap-report.html
 /api/reports
 /api/ticker-history?ticker=NVDA
 /api/job/status
-/api/backtest/summary
-/api/backtest/signals
-/api/backtest/ticker?ticker=NVDA
+/api/backtest/*  # 当前返回 disabled
 ```
 
 ## 可选旧数据源
@@ -469,4 +467,4 @@ python -m py_compile scripts\scan_futu.py scripts\backtest_futu.py scripts\futu_
 - 非交易日不会生成空报告。
 - 期权成交量 Top5 默认剔除指数和 ETF；如果确实要包含 ETF，可设置 `FUTU_INCLUDE_ETF_OPTIONS=1`。
 - OI 通常需要次日再确认，不能把单日成交量直接等同于持续持仓。
-- 本系统用于研究和回测，不构成投资建议。
+- 本系统用于研究，不构成投资建议；回测功能当前暂停。

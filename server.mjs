@@ -18,7 +18,20 @@ const autoHkScanEnabled = process.env.AUTO_HK_SCAN_ENABLED !== "0";
 const autoHkScanTimeHkt = process.env.AUTO_HK_SCAN_TIME_HKT || "16:30";
 const autoJobRetryMinutes = Math.max(5, Number(process.env.AUTO_JOB_RETRY_MINUTES || 60));
 const autoPremarketProtectMinutes = Math.max(0, Number(process.env.AUTO_PREMARKET_PROTECT_MINUTES || 90));
+const deepSeekBalanceEnabled = process.env.DEEPSEEK_BALANCE_ENABLED !== "0";
+const deepSeekBalanceCacheMs = Math.max(30_000, Number(process.env.DEEPSEEK_BALANCE_CACHE_MS || 5 * 60_000));
 const jobState = loadJobState();
+let openDHealthPromise = null;
+let deepSeekBalanceState = {
+  enabled: deepSeekBalanceEnabled,
+  provider: "deepseek",
+  configured: isDeepSeekConfigured(),
+  lastCheckedAt: "",
+  available: false,
+  balanceInfos: [],
+  error: ""
+};
+let deepSeekBalancePromise = null;
 
 const mime = {
   ".html": "text/html; charset=utf-8",
@@ -47,6 +60,28 @@ createServer(async (request, response) => {
 async function handleApi(url, response) {
   if (url.pathname === "/api/job/status") {
     sendJson(response, 200, buildPublicJobState());
+    return;
+  }
+
+  if (url.pathname === "/api/cn-review") {
+    const reviewPath = path.join(root, "data", "latest-cn-review.json");
+    if (!existsSync(reviewPath)) {
+      sendJson(response, 404, { error: "A-share review not found. Run npm run review:cn first." });
+      return;
+    }
+    sendJson(response, 200, JSON.parse(readFileSync(reviewPath, "utf8")));
+    return;
+  }
+
+  if (url.pathname === "/api/deepseek/balance") {
+    const force = url.searchParams.get("force") === "1";
+    const balance = await refreshDeepSeekBalance({ force });
+    sendJson(response, 200, balance);
+    return;
+  }
+
+  if (url.pathname.startsWith("/api/backtest/")) {
+    sendJson(response, 410, { error: "Backtest is temporarily disabled." });
     return;
   }
 
@@ -103,6 +138,7 @@ async function handleApi(url, response) {
     return;
   }
 
+  /* Backtest API is temporarily disabled.
   if (url.pathname === "/api/backtest/summary") {
     const rows = await all(
       `SELECT r.horizon_days, r.status, s.qualified_by_leap,
@@ -169,6 +205,7 @@ async function handleApi(url, response) {
     sendJson(response, 200, { ticker, signals: rows.map(normalizeBacktestRow) });
     return;
   }
+  */
 
   sendJson(response, 404, { error: "Unknown API endpoint" });
 }
@@ -313,6 +350,8 @@ function startScheduler() {
   mkdirSync(path.join(root, "data"), { recursive: true });
   updateNextRun();
   persistJobState();
+  refreshDeepSeekBalance().catch(() => {});
+  setInterval(() => refreshDeepSeekBalance().catch(() => {}), deepSeekBalanceCacheMs);
   setTimeout(refreshOpenDStatus, 1000);
   setInterval(refreshOpenDStatus, 5 * 60_000);
   if (!autoScanEnabled && !autoPremarketEnabled && !autoHkScanEnabled) return;
@@ -324,7 +363,7 @@ async function refreshOpenDStatus() {
   if (jobState.running) return;
   try {
     const et = getEtParts();
-    const health = await runJson("python", ["scripts/futu_healthcheck.py", "--market", "US", "--trading-day", et.date]);
+    const health = await checkOpenDHealth("US", et.date);
     jobState.openD = health;
     jobState.healthCheckedAt = new Date().toISOString();
     if (jobState.lastStatus === "idle" || jobState.lastStatus === "error" || jobState.lastStatus === "disconnected") {
@@ -399,7 +438,7 @@ async function runScheduledPipeline({ dateEt, kind, market, script }) {
   persistJobState();
 
   try {
-    const health = await runJson("python", ["scripts/futu_healthcheck.py", "--market", market || "US", "--trading-day", dateEt]);
+    const health = await checkOpenDHealth(market || "US", dateEt);
     jobState.openD = health;
     if (!health.connected) {
       jobState.lastStatus = "disconnected";
@@ -438,6 +477,18 @@ async function runScheduledPipeline({ dateEt, kind, market, script }) {
   }
 }
 
+async function checkOpenDHealth(market, tradingDay) {
+  while (openDHealthPromise) {
+    await openDHealthPromise.catch(() => {});
+  }
+  openDHealthPromise = runJson("python", ["scripts/futu_healthcheck.py", "--market", market, "--trading-day", tradingDay]);
+  try {
+    return await openDHealthPromise;
+  } finally {
+    openDHealthPromise = null;
+  }
+}
+
 function buildPublicJobState() {
   updateNextRun();
   return {
@@ -449,8 +500,114 @@ function buildPublicJobState() {
     hkScheduleTimeHkt: autoHkScanTimeHkt,
     retryMinutes: autoJobRetryMinutes,
     premarketProtectMinutes: autoPremarketProtectMinutes,
+    deepSeekBalance: publicDeepSeekBalanceState(),
     ...jobState
   };
+}
+
+async function refreshDeepSeekBalance({ force = false } = {}) {
+  deepSeekBalanceState.enabled = deepSeekBalanceEnabled;
+  deepSeekBalanceState.configured = isDeepSeekConfigured();
+  if (!deepSeekBalanceEnabled) {
+    deepSeekBalanceState = {
+      ...deepSeekBalanceState,
+      available: false,
+      balanceInfos: [],
+      error: "DeepSeek balance monitor is disabled."
+    };
+    return publicDeepSeekBalanceState();
+  }
+  if (!deepSeekBalanceState.configured) {
+    deepSeekBalanceState = {
+      ...deepSeekBalanceState,
+      available: false,
+      balanceInfos: [],
+      error: "DeepSeek API key/base URL is not configured."
+    };
+    return publicDeepSeekBalanceState();
+  }
+  const checkedAt = Date.parse(deepSeekBalanceState.lastCheckedAt || "");
+  if (!force && Number.isFinite(checkedAt) && Date.now() - checkedAt < deepSeekBalanceCacheMs) {
+    return publicDeepSeekBalanceState();
+  }
+  if (deepSeekBalancePromise) return deepSeekBalancePromise;
+  deepSeekBalancePromise = fetchDeepSeekBalance()
+    .then((payload) => {
+      deepSeekBalanceState = {
+        enabled: deepSeekBalanceEnabled,
+        provider: "deepseek",
+        configured: true,
+        lastCheckedAt: new Date().toISOString(),
+        available: Boolean(payload.is_available),
+        balanceInfos: normalizeDeepSeekBalanceInfos(payload.balance_infos),
+        error: ""
+      };
+      return publicDeepSeekBalanceState();
+    })
+    .catch((error) => {
+      deepSeekBalanceState = {
+        ...deepSeekBalanceState,
+        enabled: deepSeekBalanceEnabled,
+        configured: true,
+        lastCheckedAt: new Date().toISOString(),
+        available: false,
+        balanceInfos: [],
+        error: error.message
+      };
+      return publicDeepSeekBalanceState();
+    })
+    .finally(() => {
+      deepSeekBalancePromise = null;
+    });
+  return deepSeekBalancePromise;
+}
+
+async function fetchDeepSeekBalance() {
+  const response = await fetch(`${deepSeekApiRoot()}/user/balance`, {
+    headers: {
+      authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      accept: "application/json"
+    }
+  });
+  const text = await response.text();
+  let payload = {};
+  try {
+    payload = text ? JSON.parse(text) : {};
+  } catch {
+    payload = { raw: text };
+  }
+  if (!response.ok) {
+    const message = payload.error?.message || payload.message || text || `DeepSeek balance API ${response.status}`;
+    throw new Error(message);
+  }
+  return payload;
+}
+
+function normalizeDeepSeekBalanceInfos(rows) {
+  return Array.isArray(rows)
+    ? rows.map((row) => ({
+        currency: String(row.currency || ""),
+        totalBalance: String(row.total_balance ?? ""),
+        grantedBalance: String(row.granted_balance ?? ""),
+        toppedUpBalance: String(row.topped_up_balance ?? "")
+      }))
+    : [];
+}
+
+function publicDeepSeekBalanceState() {
+  return {
+    ...deepSeekBalanceState,
+    balanceInfos: deepSeekBalanceState.balanceInfos.map((row) => ({ ...row }))
+  };
+}
+
+function isDeepSeekConfigured() {
+  return Boolean(process.env.OPENAI_API_KEY) && deepSeekApiRoot().includes("api.deepseek.com");
+}
+
+function deepSeekApiRoot() {
+  const base = (process.env.DEEPSEEK_BASE_URL || process.env.OPENAI_BASE_URL || "https://api.deepseek.com").replace(/\/$/, "");
+  return base.replace(/\/v1$/, "");
 }
 
 function updateNextRun() {

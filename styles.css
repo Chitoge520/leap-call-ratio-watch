@@ -686,6 +686,160 @@ tbody tr:hover {
   min-width: 820px;
 }
 
+.cn-review-hero,
+.cn-review-section {
+  margin-bottom: 18px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.cn-review-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: center;
+}
+
+.cn-review-hero h3 {
+  margin: 4px 0 8px;
+  font-size: 26px;
+}
+
+.cn-review-hero p {
+  margin: 0;
+}
+
+.cn-review-meta,
+.cn-index-grid,
+.cn-theme-grid,
+.cn-playbook {
+  display: grid;
+  gap: 12px;
+}
+
+.cn-review-meta {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  margin-bottom: 18px;
+}
+
+.cn-index-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.cn-theme-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.cn-playbook {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.cn-review-meta article,
+.cn-index-grid article,
+.cn-theme-grid article,
+.cn-playbook article {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbf8f1;
+}
+
+.cn-review-meta span,
+.cn-index-grid span,
+.cn-index-grid small,
+.cn-theme-grid p,
+.cn-theme-grid small {
+  color: var(--muted);
+}
+
+.cn-review-meta span,
+.cn-index-grid span {
+  display: block;
+  font-size: 12px;
+}
+
+.cn-review-meta strong,
+.cn-index-grid strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 20px;
+}
+
+.cn-theme-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.cn-theme-head span {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: var(--ink);
+  color: #fff;
+  font-weight: 800;
+}
+
+.cn-theme-grid p,
+.cn-theme-grid small {
+  display: block;
+  margin: 8px 0 0;
+  line-height: 1.5;
+}
+
+.cn-playbook h4 {
+  margin: 0 0 8px;
+}
+
+.cn-playbook p,
+.cn-playbook ul {
+  margin: 0;
+}
+
+.cn-stock-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cn-stock-chips span {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fffdf8;
+  font-size: 12px;
+}
+
+.cn-stock-chips strong {
+  margin-right: 6px;
+}
+
+.cn-review-tables {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.cn-data-gaps ul {
+  margin: 0;
+}
+
+.positive {
+  color: var(--good);
+}
+
+.negative {
+  color: var(--bad);
+}
+
 .mini-btn {
   border: 0;
   border-radius: 6px;
@@ -820,10 +974,20 @@ textarea {
   .stats-grid,
   .summary-grid,
   .plan-grid,
+  .cn-review-meta,
+  .cn-index-grid,
+  .cn-theme-grid,
+  .cn-playbook,
+  .cn-review-tables,
   .research-layout,
   .pipeline-layout,
   .history-layout {
     grid-template-columns: 1fr;
+  }
+
+  .cn-review-hero {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 

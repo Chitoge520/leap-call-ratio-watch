@@ -5,13 +5,17 @@ import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[1]
+FUTU_APPDATA = os.getenv("FUTU_APPDATA") or str(ROOT / ".futu-appdata")
+os.environ["APPDATA"] = FUTU_APPDATA
+os.environ["appdata"] = FUTU_APPDATA
+
 try:
     from futu import AuType, KLType, OpenQuoteContext, RET_OK
 except ImportError as exc:
     raise SystemExit("Missing futu-api. Install it with: pip install -r requirements-futu.txt") from exc
 
 
-ROOT = Path(__file__).resolve().parents[1]
 DB_PATH = ROOT / "data" / "leap_watch.db"
 HORIZONS = (20, 60, 120)
 
@@ -95,13 +99,18 @@ def init_db(conn):
 
 
 def load_signals(conn):
-    return conn.execute(
+    rows = conn.execute(
         """
         SELECT s.*
         FROM backtest_signals s
         ORDER BY s.report_date ASC, s.signal_id ASC
         """
     ).fetchall()
+    filtered = [row for row in rows if is_us_ticker(row["ticker"])]
+    skipped = len(rows) - len(filtered)
+    if skipped:
+        print(f"Skipped {skipped} non-US backtest signals.")
+    return filtered
 
 
 def fetch_price_bars(conn, quote_ctx, signals):
@@ -245,6 +254,16 @@ def parse_date(value):
 
 def to_futu_us_code(symbol):
     return symbol if symbol.startswith("US.") else f"US.{symbol}"
+
+
+def is_us_ticker(symbol):
+    text = str(symbol or "").upper().strip()
+    if text.startswith("US."):
+        text = text.split(".", 1)[1]
+    if not text or text.isdigit() or len(text) > 8:
+        return False
+    allowed = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-")
+    return all(ch in allowed for ch in text) and any(ch.isalpha() for ch in text)
 
 
 def number(value, fallback=0):

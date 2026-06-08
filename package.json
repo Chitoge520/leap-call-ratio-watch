@@ -16,9 +16,10 @@
     "analyze:ai:hk": "set AI_REPORT_PATH=data/latest-hk-report.json&& node scripts/ai-analyze.mjs",
     "premarket:futu": "python scripts/premarket_futu.py",
     "premarket:futu:ai": "node scripts/premarket-futu-pipeline.mjs",
-    "backtest:futu": "python scripts/backtest_futu.py",
+    "backtest:futu": "node -e \"console.log('Backtest is temporarily disabled.')\"",
     "daily:futu": "node scripts/daily-futu-pipeline.mjs",
     "daily:futu:hk": "node scripts/daily-hk-futu-pipeline.mjs",
+    "review:cn": "python scripts/cn_review.py",
     "check": "node --check app.js && node --check server.mjs && node --check scripts/scan.mjs && node --check scripts/scan-alpha-vantage.mjs && node --check scripts/ai-analyze.mjs && node --check scripts/daily-futu-pipeline.mjs && node --check scripts/daily-hk-futu-pipeline.mjs && node --check scripts/premarket-futu-pipeline.mjs"
   },
   "dependencies": {

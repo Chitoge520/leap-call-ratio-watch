@@ -9,6 +9,8 @@ reports/
 data/*.db
 data/*.db-*
 data/job-status.json
+data/latest-cn-review.json
+data/latest-hk-report.json
 *.log
 logs/
 .DS_Store

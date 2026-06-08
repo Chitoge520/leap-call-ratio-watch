@@ -114,6 +114,7 @@ let activeView = "dashboard";
 let sortKey = "score";
 let selectedTicker = records[0]?.ticker || "";
 let topOptionAlerts = [];
+let cnReview = null;
 
 const els = {
   pageTitle: document.querySelector("#pageTitle"),
@@ -150,7 +151,16 @@ const els = {
   backtestSummaryRows: document.querySelector("#backtestSummaryRows"),
   backtestSignalRows: document.querySelector("#backtestSignalRows"),
   backtestTicker: document.querySelector("#backtestTicker"),
-  backtestHorizon: document.querySelector("#backtestHorizon")
+  backtestHorizon: document.querySelector("#backtestHorizon"),
+  refreshCnReview: document.querySelector("#refreshCnReview"),
+  cnReviewHeadline: document.querySelector("#cnReviewHeadline"),
+  cnReviewMeta: document.querySelector("#cnReviewMeta"),
+  cnIndexGrid: document.querySelector("#cnIndexGrid"),
+  cnThemeGrid: document.querySelector("#cnThemeGrid"),
+  cnPlaybook: document.querySelector("#cnPlaybook"),
+  cnLeaderRows: document.querySelector("#cnLeaderRows"),
+  cnActiveRows: document.querySelector("#cnActiveRows"),
+  cnDataGaps: document.querySelector("#cnDataGaps")
 };
 
 function loadRecords() {
@@ -261,10 +271,13 @@ async function renderJobStatus() {
     const status = await response.json();
     els.jobStatusText.textContent = status.running ? "running" : status.lastStatus || "idle";
     const openD = status.openD || {};
+    const deepSeek = status.deepSeekBalance || {};
     els.jobStatusGrid.innerHTML = [
       ["Enabled", status.enabled ? "yes" : "no"],
       ["OpenD", openD.connected ? "connected" : "disconnected"],
       ["Trading day", openD.isTradingDay ? "yes" : "no"],
+      ["DeepSeek", formatDeepSeekBalance(deepSeek)],
+      ["DeepSeek check", deepSeek.lastCheckedAt ? deepSeek.lastCheckedAt.slice(0, 19).replace("T", " ") : "-"],
       ["Last run", status.lastRunAt ? status.lastRunAt.slice(0, 19).replace("T", " ") : "-"],
       ["Next ET", status.nextRunEt || "-"],
       ["Error", status.error || "-"]
@@ -273,6 +286,145 @@ async function renderJobStatus() {
     els.jobStatusText.textContent = "unavailable";
     els.jobStatusGrid.innerHTML = `<article><span>Error</span><strong>${error.message}</strong></article>`;
   }
+}
+
+function formatDeepSeekBalance(balance) {
+  if (!balance.enabled) return "disabled";
+  if (!balance.configured) return "not configured";
+  if (balance.error) return "error";
+  const infos = Array.isArray(balance.balanceInfos) ? balance.balanceInfos : [];
+  if (!infos.length) return balance.available ? "available" : "unavailable";
+  return infos.map((row) => `${row.currency || ""} ${row.totalBalance || "-"}`.trim()).join(" / ");
+}
+
+async function loadCnReview({ silent = false } = {}) {
+  try {
+    let response = await fetch("/api/cn-review", { cache: "no-store" });
+    if (!response.ok) {
+      response = await fetch("data/latest-cn-review.json", { cache: "no-store" });
+    }
+    if (!response.ok) throw new Error("A股复盘读取失败");
+    cnReview = await response.json();
+    renderCnReview();
+    if (!silent) alert("已载入 A股全面复盘");
+  } catch (error) {
+    cnReview = null;
+    renderCnReviewError(error.message);
+    if (!silent) alert(`${error.message}。请先运行 npm run review:cn。`);
+  }
+}
+
+function renderCnReview() {
+  if (!els.cnReviewHeadline) return;
+  if (!cnReview) {
+    renderCnReviewError("暂无 A股复盘。请先运行 npm run review:cn。");
+    return;
+  }
+  const summary = cnReview.summary || {};
+  const playbook = cnReview.playbook || {};
+  els.cnReviewHeadline.textContent = playbook.headline || "A股全面复盘已生成。";
+  els.cnReviewMeta.innerHTML = [
+    ["市场状态", summary.marketState || "-"],
+    ["情绪温度", `${summary.emotionScore ?? "-"} / 100`],
+    ["上涨/下跌", `${summary.advancers ?? 0} / ${summary.decliners ?? 0}`],
+    ["涨停/跌停", `${summary.limitUp ?? 0} / ${summary.limitDown ?? 0}`],
+    ["成交额", compactCn(summary.totalTurnover)],
+    ["覆盖股票", `${summary.stockCoverage ?? 0}`]
+  ].map(([label, value]) => `<article><span>${label}</span><strong>${value}</strong></article>`).join("");
+
+  els.cnIndexGrid.innerHTML = (cnReview.indices || []).map((row) => `
+    <article>
+      <span>${row.name || row.code}</span>
+      <strong class="${number(row.changeRate) >= 0 ? "positive" : "negative"}">${formatSignedPct(row.changeRate)}</strong>
+      <small>${formatPrice(row.lastPrice)} · ${compactCn(row.turnover)}</small>
+    </article>
+  `).join("");
+
+  els.cnThemeGrid.innerHTML = (cnReview.themes || []).slice(0, 8).map((theme) => `
+    <article>
+      <div class="cn-theme-head">
+        <strong>${theme.theme}</strong>
+        <span>${theme.heatScore}</span>
+      </div>
+      <p>均涨幅 ${formatSignedPct(theme.averageChangeRate)} · 上涨占比 ${(number(theme.breadth) * 100).toFixed(1)}% · 涨停 ${theme.limitUp}</p>
+      <small>${(theme.leaders || []).slice(0, 3).map((row) => `${row.name} ${formatSignedPct(row.changeRate)}`).join(" / ") || "-"}</small>
+    </article>
+  `).join("");
+
+  els.cnPlaybook.innerHTML = `
+    <article>
+      <h4>仓位与节奏</h4>
+      <p>${playbook.position || "-"}</p>
+    </article>
+    <article>
+      <h4>确认信号</h4>
+      ${renderCnList(playbook.confirmations)}
+    </article>
+    <article>
+      <h4>风险线</h4>
+      ${renderCnList(playbook.risks)}
+    </article>
+    <article>
+      <h4>观察名单</h4>
+      ${renderCnStockChips(playbook.watchlist)}
+    </article>
+  `;
+
+  renderCnRows(els.cnLeaderRows, (cnReview.leaders || []).slice(0, 12));
+  renderCnRows(els.cnActiveRows, (cnReview.activeTurnover || []).slice(0, 12));
+  els.cnDataGaps.innerHTML = renderCnList(cnReview.dataGaps);
+}
+
+function renderCnReviewError(message) {
+  if (!els.cnReviewHeadline) return;
+  els.cnReviewHeadline.textContent = message;
+  if (els.cnReviewMeta) els.cnReviewMeta.innerHTML = "";
+  if (els.cnIndexGrid) els.cnIndexGrid.innerHTML = "";
+  if (els.cnThemeGrid) els.cnThemeGrid.innerHTML = "";
+  if (els.cnPlaybook) els.cnPlaybook.innerHTML = "";
+  if (els.cnLeaderRows) els.cnLeaderRows.innerHTML = `<tr><td colspan="5">${message}</td></tr>`;
+  if (els.cnActiveRows) els.cnActiveRows.innerHTML = `<tr><td colspan="5">${message}</td></tr>`;
+  if (els.cnDataGaps) els.cnDataGaps.innerHTML = "";
+}
+
+function renderCnRows(target, rows) {
+  if (!target) return;
+  target.innerHTML = rows.length
+    ? rows.map((row) => `
+      <tr>
+        <td><strong>${row.code || row.ticker || "-"}</strong></td>
+        <td>${row.name || "-"}</td>
+        <td class="${number(row.changeRate) >= 0 ? "positive" : "negative"}">${formatSignedPct(row.changeRate)}</td>
+        <td>${compactCn(row.turnover)}</td>
+        <td>${row.theme || "-"}</td>
+      </tr>
+    `).join("")
+    : `<tr><td colspan="5">暂无数据</td></tr>`;
+}
+
+function renderCnList(items) {
+  if (!Array.isArray(items) || !items.length) return "<p>暂无</p>";
+  return `<ul>${items.map((item) => `<li>${item}</li>`).join("")}</ul>`;
+}
+
+function renderCnStockChips(items) {
+  if (!Array.isArray(items) || !items.length) return "<p>暂无</p>";
+  return `<div class="cn-stock-chips">${items.map((row) => `
+    <span><strong>${row.name || row.code}</strong>${formatSignedPct(row.changeRate)} · ${row.theme || "-"}</span>
+  `).join("")}</div>`;
+}
+
+function compactCn(value) {
+  const n = number(value);
+  if (Math.abs(n) >= 100_000_000) return `${(n / 100_000_000).toFixed(2)}亿`;
+  if (Math.abs(n) >= 10_000) return `${(n / 10_000).toFixed(1)}万`;
+  return `${Math.round(n)}`;
+}
+
+function formatSignedPct(value) {
+  const n = number(value, NaN);
+  if (!Number.isFinite(n)) return "-";
+  return `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
 }
 
 async function renderBacktest() {
@@ -1042,9 +1194,11 @@ function renderAll() {
   renderTickerList();
   renderNote();
   renderJobStatus();
+  renderCnReview();
 }
 
 function switchView(view) {
+  if (view === "backtest") view = "dashboard";
   activeView = view;
   document.querySelectorAll(".view").forEach((el) => el.classList.remove("active"));
   document.querySelector(`#${view}View`).classList.add("active");
@@ -1054,14 +1208,14 @@ function switchView(view) {
   const titleMap = {
     dashboard: "异常榜",
     research: "研究报告",
-    backtest: "Backtest",
+    cnReview: "A股全面复盘",
     history: "历史查询",
     pipeline: "数据录入",
     framework: "监控框架"
   };
   els.pageTitle.textContent = titleMap[view];
+  if (view === "cnReview" && !cnReview) loadCnReview({ silent: true });
   if (view === "history") renderHistoryReports();
-  if (view === "backtest") renderBacktest();
 }
 
 function readForm(form) {
@@ -1123,11 +1277,12 @@ els.loadAutoReport.addEventListener("click", () => {
 els.loadHkReport?.addEventListener("click", () => {
   loadGeneratedReport({ market: "HK" });
 });
+els.refreshCnReview?.addEventListener("click", () => {
+  loadCnReview();
+});
 
 els.refreshHistory?.addEventListener("click", renderHistoryReports);
-els.refreshBacktest?.addEventListener("click", renderBacktest);
-els.backtestTicker?.addEventListener("input", renderBacktestSignals);
-els.backtestHorizon?.addEventListener("change", renderBacktestSignals);
+// Backtest UI is temporarily disabled.
 els.loadTickerHistory?.addEventListener("click", renderTickerHistory);
 els.historyTicker?.addEventListener("keydown", (event) => {
   if (event.key === "Enter") renderTickerHistory();

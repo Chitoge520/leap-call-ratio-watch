@@ -6,6 +6,11 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[1]
+FUTU_APPDATA = os.getenv("FUTU_APPDATA") or str(ROOT / ".futu-appdata")
+os.environ["APPDATA"] = FUTU_APPDATA
+os.environ["appdata"] = FUTU_APPDATA
+
 try:
     from futu import (
         Market,
@@ -24,7 +29,6 @@ except ImportError as exc:
     ) from exc
 
 
-ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH = ROOT / "config" / "watchlist.json"
 DATA_DIR = ROOT / "data"
 REPORTS_DIR = ROOT / "reports"
@@ -258,26 +262,8 @@ def save_report_to_db(report):
                     json.dumps(record, ensure_ascii=False),
                 ),
             )
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO backtest_signals
-                (report_date, generated_at, ticker, score, option_volume, leap_ratio, cp_ratio,
-                 premium_flow, qualified_by_leap, raw_json)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    report_date,
-                    generated_at,
-                    record.get("ticker", ""),
-                    record.get("score", 0),
-                    record.get("stockOptionVolume") or record.get("totalVolume", 0),
-                    record.get("leapRatio", 0),
-                    record.get("cpRatio", 0),
-                    record.get("premiumFlow", 0),
-                    1 if record.get("qualifiedByLeapThreshold") else 0,
-                    json.dumps(record, ensure_ascii=False),
-                ),
-            )
+            # Backtest is temporarily disabled; keep historical tables intact but stop
+            # inserting new signals during scans.
             for row in record.get("optionChain", []):
                 conn.execute(
                     """

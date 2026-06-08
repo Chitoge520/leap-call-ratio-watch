@@ -5,7 +5,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-os.environ["APPDATA"] = os.getenv("FUTU_APPDATA") or str(ROOT / ".futu-appdata")
+FUTU_APPDATA = os.getenv("FUTU_APPDATA") or str(ROOT / ".futu-appdata")
+os.environ["APPDATA"] = FUTU_APPDATA
+os.environ["appdata"] = FUTU_APPDATA
 
 try:
     from futu import OpenQuoteContext, RET_OK

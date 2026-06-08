@@ -18,8 +18,8 @@ mkdirSync(futuAppData, { recursive: true });
 env.APPDATA = env.APPDATA || futuAppData;
 
 await run("python", ["scripts/scan_futu.py"], env);
-await run("node", ["scripts/ai-analyze.mjs"], env);
-await run("python", ["scripts/backtest_futu.py"], env);
+await runOptional("node", ["scripts/ai-analyze.mjs"], env);
+// Backtest is temporarily disabled. Keep scripts/backtest_futu.py for later use.
 
 function run(command, args, envVars) {
   return new Promise((resolve, reject) => {
@@ -35,6 +35,14 @@ function run(command, args, envVars) {
       else reject(new Error(`${command} ${args.join(" ")} exited with ${code}`));
     });
   });
+}
+
+async function runOptional(command, args, envVars) {
+  try {
+    await run(command, args, envVars);
+  } catch (error) {
+    console.warn(`Optional step failed: ${error.message}`);
+  }
 }
 
 function loadDotenv(filePath) {
