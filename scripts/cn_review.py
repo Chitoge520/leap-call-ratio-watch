@@ -10,6 +10,8 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import tushare as ts
+
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
@@ -75,7 +77,10 @@ def main():
     indices = fetch_indices(client, trade_date)
     generated_at = datetime.now(timezone.utc).isoformat()
     report = build_review(generated_at, trade_date, rows, indices, max_stocks)
-    report["strategyCandidates"] = build_strategy_candidates(report, rows)
+    report["strategyCandidates"] = build_strategy_candidates(report, rows, client, trade_date)
+    report["summary"]["strategyTechnicalCoverage"] = len(
+        [row for row in report["strategyCandidates"] if row.get("technical", {}).get("historyRows", 0) >= 20]
+    )
 
     date_stamp = trade_date_to_iso(trade_date)
     markdown = build_markdown(report)
@@ -93,50 +98,36 @@ class TushareClient:
         self.sleep_ms = int(os.getenv("TUSHARE_SLEEP_MS", "250"))
         self.retries = max(1, int(os.getenv("TUSHARE_RETRIES", "3")))
         self.retry_delay_ms = int(os.getenv("TUSHARE_RETRY_DELAY_MS", "1500"))
+        CACHE_DIR.mkdir(exist_ok=True)
+        self.pro = ts.pro_api(token)
+        self.pro._DataApi__http_url = self.url
 
     def query(self, api_name, params=None, fields=""):
-        payload = {
+        params = params or {}
+        cache_payload = {
             "api_name": api_name,
-            "token": self.token,
-            "params": params or {},
+            "params": params,
             "fields": fields,
         }
-        data = json.dumps(payload).encode("utf-8")
-        request = urllib.request.Request(
-            self.url,
-            data=data,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
         last_error = None
         for attempt in range(1, self.retries + 1):
             try:
-                with urllib.request.urlopen(request, timeout=45) as response:
-                    body = json.loads(response.read().decode("utf-8"))
+                df = self.pro.query(api_name, fields=fields, **params)
                 break
-            except urllib.error.URLError as exc:
+            except Exception as exc:
                 last_error = exc
                 if attempt >= self.retries:
-                    cached = read_tushare_cache(api_name, payload)
+                    cached = read_tushare_cache(api_name, cache_payload)
                     if cached is not None:
-                        print(f"{api_name} using cached response after network error: {exc}")
+                        print(f"{api_name} using cached response after Tushare SDK error: {exc}")
                         return cached
-                    raise RuntimeError(f"Tushare request failed for {api_name}: {exc}") from exc
+                    raise RuntimeError(f"Tushare SDK request failed for {api_name}: {exc}") from exc
                 time.sleep(self.retry_delay_ms / 1000 * attempt)
         else:
-            raise RuntimeError(f"Tushare request failed for {api_name}: {last_error}")
+            raise RuntimeError(f"Tushare SDK request failed for {api_name}: {last_error}")
 
-        if body.get("code") != 0:
-            cached = read_tushare_cache(api_name, payload)
-            if cached is not None:
-                print(f"{api_name} using cached response after Tushare error: {body.get('msg') or body}")
-                return cached
-            raise RuntimeError(f"Tushare {api_name} error: {body.get('msg') or body}")
-
-        columns = body.get("data", {}).get("fields", [])
-        items = body.get("data", {}).get("items", [])
-        rows = [dict(zip(columns, item)) for item in items]
-        write_tushare_cache(api_name, payload, rows)
+        rows = df.to_dict("records") if df is not None else []
+        write_tushare_cache(api_name, cache_payload, rows)
         if self.sleep_ms > 0:
             time.sleep(self.sleep_ms / 1000)
         return rows
@@ -501,29 +492,367 @@ def build_playbook(summary, themes, indices):
     }
 
 
-def build_strategy_candidates(report, rows):
+def build_strategy_candidates(report, rows, client=None, trade_date=None):
     summary = report.get("summary", {})
-    theme_rank = {item["theme"]: index for index, item in enumerate(report.get("themes", []))}
+    themes = report.get("themes", [])
+    theme_rank = {item["theme"]: index for index, item in enumerate(themes)}
+    theme_heat = {item["theme"]: item.get("heatScore", 0) for item in themes}
     candidates = []
     liquid_rows = [row for row in rows if row["turnover"] >= 100_000_000 and row["lastPrice"] > 0]
     for row in liquid_rows:
-        change = row["changeRate"]
-        turnover_score = clamp(math.log10(max(row["turnover"], 1) / 100_000_000 + 1) * 22, 0, 30)
-        theme_score = clamp(30 - theme_rank.get(row.get("theme"), 8) * 4, 0, 30)
-        strength_score = clamp((change + 5) * 5, 0, 30)
-        valuation_score = valuation_score_for(row)
-        risk_penalty = risk_penalty_for(row)
-        total = clamp(turnover_score + theme_score + strength_score + valuation_score - risk_penalty, 0, 100)
-        candidates.append(strategy_row(row, total, turnover_score, theme_score, strength_score, valuation_score, risk_penalty, summary))
+        factors = build_factor_scores(row, summary, theme_rank, theme_heat)
+        candidates.append(strategy_row(row, factors, summary))
 
     candidates.sort(key=lambda item: (item["totalScore"], item["turnover"], item["changeRate"]), reverse=True)
     limit = int(os.getenv("CN_REVIEW_STRATEGY_LIMIT", "10"))
+    tech_pool = int(os.getenv("CN_REVIEW_TECH_POOL", str(max(limit * 2, 20))))
+    candidates = candidates[:tech_pool]
+    enrich_strategy_technicals(candidates, client, trade_date)
+    for item in candidates:
+        factors = build_factor_scores(item, summary, theme_rank, theme_heat)
+        refresh_strategy_scores(item, factors, summary)
+    candidates.sort(key=lambda item: (item["totalScore"], item.get("factorScores", {}).get("technical", 0), item["turnover"]), reverse=True)
+    candidates = candidates[:limit]
     for index, item in enumerate(candidates):
         item["selected"] = index < min(limit, 10)
-    return candidates[:limit]
+    return candidates
 
 
-def strategy_row(row, total, turnover_score, theme_score, strength_score, valuation_score, risk_penalty, summary):
+def enrich_strategy_technicals(candidates, client, trade_date):
+    if not client or not trade_date:
+        return
+    max_count = min(len(candidates), int(os.getenv("CN_REVIEW_TECH_LIMIT", str(len(candidates) or 20))))
+    for row in candidates[:max_count]:
+        try:
+            history = fetch_price_history(client, row["code"], trade_date)
+            technical = build_technical_snapshot(history, row)
+            apply_technical_snapshot(row, technical)
+        except RuntimeError as exc:
+            row.setdefault("strategyDecision", {}).setdefault("riskFlags", []).append(f"历史K线读取失败：{exc}")
+
+
+def fetch_price_history(client, code, trade_date):
+    end = str(trade_date)
+    start = (datetime.strptime(end, "%Y%m%d") - timedelta(days=180)).strftime("%Y%m%d")
+    rows = client.query(
+        "daily",
+        {"ts_code": code, "start_date": start, "end_date": end},
+        "ts_code,trade_date,open,high,low,close,pre_close,change,pct_chg,vol,amount",
+    )
+    return sorted(rows, key=lambda item: str(item.get("trade_date") or ""))
+
+
+def build_technical_snapshot(history, row):
+    closes = [pick_number(item, "close") for item in history if pick_number(item, "close") > 0]
+    highs = [pick_number(item, "high") for item in history if pick_number(item, "high") > 0]
+    lows = [pick_number(item, "low") for item in history if pick_number(item, "low") > 0]
+    vols = [pick_number(item, "vol") for item in history if pick_number(item, "vol") >= 0]
+    latest_close = closes[-1] if closes else row.get("lastPrice", 0)
+    ma20 = average(closes[-20:])
+    ma60 = average(closes[-60:])
+    pivot = max(highs[-60:]) if highs else row.get("high") or latest_close
+    distance_to_pivot = (latest_close - pivot) / pivot * 100 if pivot else 0
+    avg20_vol = average(vols[-21:-1] if len(vols) > 21 else vols[-20:])
+    latest_vol = vols[-1] if vols else 0
+    volume_ratio = latest_vol / avg20_vol if avg20_vol else row.get("volumeRatio", 0)
+    macd_hist = macd_histogram(closes)
+    atr = atr14(history)
+    rsi = rsi14(closes)
+    vcp = detect_vcp(history)
+    return {
+        "historyRows": len(history),
+        "ma20": round(ma20, 2),
+        "ma60": round(ma60, 2),
+        "rsi14": round(rsi, 1),
+        "macdHist": round(macd_hist, 3),
+        "volumeRatio": round(volume_ratio, 2),
+        "atr14": round(atr, 2),
+        "pivot": round(pivot, 2),
+        "distanceToPivotPct": round(distance_to_pivot, 2),
+        "latestClose": round(latest_close, 2),
+        "return20": round(period_return(closes, 20), 2),
+        "return60": round(period_return(closes, 60), 2),
+        "return120": round(period_return(closes, 120), 2),
+        "atrPct": round(atr / latest_close * 100, 2) if latest_close else 0,
+        "vcp": vcp,
+    }
+
+
+def apply_technical_snapshot(row, technical):
+    row["technical"] = technical
+    distance = technical.get("distanceToPivotPct", 0)
+    row["distanceToPivotPct"] = distance
+    row["pivotScore"] = round(clamp(100 + distance, 0, 100), 1)
+    ma20 = technical.get("ma20", 0)
+    ma60 = technical.get("ma60", 0)
+    close = technical.get("latestClose") or row.get("lastPrice", 0)
+    row["rs"] = round(clamp((close / ma60 - 1) * 120 + 55, 0, 100) if ma60 else row.get("rs", 0), 1)
+    row["earlyVcp"] = technical.get("vcp", "样本不足")
+    if close and ma20 and ma60 and close > ma20 > ma60:
+        row["stockState"] = "多头趋势"
+    elif close and ma20 and close > ma20:
+        row["stockState"] = "站上MA20"
+    elif close and ma20 and close < ma20:
+        row["stockState"] = "均线下方"
+    if -3 <= distance <= 1.5:
+        row["pivotStage"] = "临近枢轴"
+    elif distance > 1.5:
+        row["pivotStage"] = "突破枢轴"
+    else:
+        row["pivotStage"] = "枢轴下方"
+    if technical.get("vcp") == "收敛":
+        row["buyPointType"] = "VCP收敛"
+    elif technical.get("volumeRatio", 0) >= 1.5 and distance >= -3:
+        row["buyPointType"] = "放量突破"
+
+
+def build_factor_scores(row, summary, theme_rank, theme_heat):
+    market = market_factor_score(summary)
+    theme = theme_factor_score(row, theme_rank, theme_heat)
+    liquidity = liquidity_factor_score(row)
+    technical = technical_factor_score(row)
+    value_quality = value_quality_factor_score(row)
+    risk_control = risk_control_factor_score(row)
+    weights = {
+        "market": 0.10,
+        "theme": 0.15,
+        "liquidity": 0.15,
+        "technical": 0.25,
+        "valueQuality": 0.15,
+        "riskControl": 0.20,
+    }
+    weighted = (
+        market * weights["market"]
+        + theme * weights["theme"]
+        + liquidity * weights["liquidity"]
+        + technical * weights["technical"]
+        + value_quality * weights["valueQuality"]
+        + risk_control * weights["riskControl"]
+    )
+    penalty = event_risk_penalty(row)
+    total = clamp(weighted - penalty, 0, 100)
+    return {
+        "market": round(market, 1),
+        "theme": round(theme, 1),
+        "liquidity": round(liquidity, 1),
+        "technical": round(technical, 1),
+        "valueQuality": round(value_quality, 1),
+        "riskControl": round(risk_control, 1),
+        "eventRiskPenalty": round(penalty, 1),
+        "total": round(total, 1),
+        "weights": weights,
+    }
+
+
+def market_factor_score(summary):
+    emotion = float(summary.get("emotionScore") or 0)
+    up_ratio = float(summary.get("upRatio") or 0)
+    limit_up = float(summary.get("limitUp") or 0)
+    limit_down = float(summary.get("limitDown") or 0)
+    breadth = clamp(up_ratio * 100, 0, 100)
+    limit_balance = clamp(55 + min(limit_up / 120, 1) * 35 - min(limit_down / 40, 1) * 35, 0, 100)
+    return clamp(emotion * 0.55 + breadth * 0.25 + limit_balance * 0.20, 0, 100)
+
+
+def theme_factor_score(row, theme_rank, theme_heat):
+    theme = row.get("theme")
+    rank = theme_rank.get(theme, 10)
+    rank_score = clamp(100 - rank * 10, 0, 100)
+    heat = clamp(float(theme_heat.get(theme, 0)), 0, 100)
+    return heat * 0.65 + rank_score * 0.35
+
+
+def liquidity_factor_score(row):
+    turnover = max(row.get("turnover", 0), 0)
+    turnover_score = clamp(math.log10(turnover / 100_000_000 + 1) * 42, 0, 100)
+    volume_ratio = row.get("technical", {}).get("volumeRatio") or row.get("volumeRatio") or 0
+    participation = clamp(volume_ratio / 2.0 * 100, 0, 100)
+    turnover_rate = row.get("turnoverRate") or 0
+    crowding_penalty = min(max(turnover_rate - 25, 0) * 2, 25)
+    return clamp(turnover_score * 0.65 + participation * 0.35 - crowding_penalty, 0, 100)
+
+
+def technical_factor_score(row):
+    technical = row.get("technical", {})
+    close = technical.get("latestClose") or row.get("lastPrice") or 0
+    ma20 = technical.get("ma20") or 0
+    ma60 = technical.get("ma60") or 0
+    ret20 = technical.get("return20") if "return20" in technical else row.get("changeRate", 0)
+    ret60 = technical.get("return60") if "return60" in technical else row.get("changeRate", 0)
+    ret120 = technical.get("return120") if "return120" in technical else row.get("changeRate", 0)
+    momentum = clamp(ret20 * 2.0 + ret60 * 0.8 + ret120 * 0.35 + 50, 0, 100)
+    trend = 50
+    if close and ma20 and ma60:
+        trend = 35
+        if close > ma20:
+            trend += 20
+        if ma20 > ma60:
+            trend += 20
+        if close > ma60:
+            trend += 15
+        trend += clamp((close / ma60 - 1) * 60, -15, 10)
+    rsi = technical.get("rsi14", 50)
+    rsi_score = clamp(100 - abs(clamp(rsi, 0, 100) - 55) * 2, 0, 100)
+    macd_score = clamp(50 + (technical.get("macdHist", 0) / max(close, 1)) * 500, 0, 100)
+    pivot_distance = technical.get("distanceToPivotPct", row.get("distanceToPivotPct", 0))
+    pivot_score = clamp(100 - abs(pivot_distance) * 4, 0, 100) if -20 <= pivot_distance <= 8 else 35
+    vcp_score = {"收敛": 95, "高位整理": 75, "未成形": 45, "样本不足": 50, "鏀舵暃": 95, "楂樹綅鏁寸悊": 75, "鏈垚褰?": 45, "鏍锋湰涓嶈冻": 50}.get(technical.get("vcp"), 50)
+    return clamp(momentum * 0.30 + trend * 0.30 + rsi_score * 0.10 + macd_score * 0.10 + pivot_score * 0.15 + vcp_score * 0.05, 0, 100)
+
+
+def value_quality_factor_score(row):
+    pe = row.get("peTtm") or 0
+    pb = row.get("pb") or 0
+    market_val = row.get("marketVal") or 0
+    dividend = row.get("dividendRatioTtm") or 0
+    pe_score = 45 if pe <= 0 else 100 if pe <= 25 else 85 if pe <= 40 else 65 if pe <= 70 else 35 if pe <= 120 else 15
+    pb_score = 50 if pb <= 0 else 90 if pb <= 3 else 75 if pb <= 6 else 55 if pb <= 10 else 30
+    size_score = 35 if market_val <= 0 else clamp(math.log10(market_val / 1_000_000_000 + 1) * 28, 25, 100)
+    yield_score = clamp(dividend * 18, 0, 100)
+    return clamp(pe_score * 0.35 + pb_score * 0.20 + size_score * 0.30 + yield_score * 0.15, 0, 100)
+
+
+def risk_control_factor_score(row):
+    technical = row.get("technical", {})
+    close = technical.get("latestClose") or row.get("lastPrice") or 0
+    atr_pct = technical.get("atrPct") or ((technical.get("atr14", 0) / close * 100) if close else row.get("amplitude", 0))
+    volatility_score = clamp(100 - max(atr_pct - 2, 0) * 9, 10, 100)
+    turnover_rate = row.get("turnoverRate") or 0
+    turnover_score = 100 if turnover_rate <= 8 else 80 if turnover_rate <= 15 else 55 if turnover_rate <= 25 else 25
+    extension = max(row.get("changeRate") or 0, 0)
+    extension_score = clamp(100 - max(extension - 5, 0) * 8, 25, 100)
+    market_val = row.get("marketVal") or 0
+    size_risk = 45 if 0 < market_val < 5_000_000_000 else 100
+    return clamp(volatility_score * 0.35 + turnover_score * 0.25 + extension_score * 0.25 + size_risk * 0.15, 0, 100)
+
+
+def event_risk_penalty(row):
+    penalty = 0
+    if row.get("changeRate", 0) >= limit_threshold(row["code"]) - 0.05:
+        penalty += 8
+    if row.get("turnoverRate", 0) > 30:
+        penalty += 5
+    if row.get("peTtm", 0) > 150:
+        penalty += 5
+    return penalty
+
+
+def refresh_strategy_scores(row, factors, summary):
+    row["factorScores"] = factors
+    row["totalScore"] = factors["total"]
+    row["commentScore"] = round((factors["theme"] + factors["technical"] + factors["valueQuality"]) / 3, 1)
+    row["turnoverScore"] = factors["liquidity"]
+    row["themeScore"] = factors["theme"]
+    row["strengthScore"] = factors["technical"]
+    row["valuationScore"] = factors["valueQuality"]
+    row["riskPenalty"] = factors["eventRiskPenalty"]
+    row["rs"] = factors["technical"]
+    row["signalLight"] = "红灯" if factors["total"] >= 78 and factors["technical"] >= 60 else "黄灯" if factors["total"] >= 60 else "灰灯"
+    row["buyPointGrade"] = "B1" if factors["total"] >= 80 else "B2" if factors["total"] >= 70 else "B3" if factors["total"] >= 60 else "C"
+    row["actionState"] = "可小仓试错" if factors["total"] >= 75 and factors["riskControl"] >= 50 else "等确认" if factors["total"] >= 60 else "观察"
+    row["buyPointQuality"] = "高" if factors["technical"] >= 75 and factors["riskControl"] >= 65 else "中" if factors["technical"] >= 55 else "低"
+    row["rating"] = "A-" if factors["total"] >= 82 else "B+" if factors["total"] >= 72 else "B" if factors["total"] >= 62 else "C"
+    decision = row.setdefault("strategyDecision", {})
+    decision["decision"] = row["actionState"]
+    decision["marketRegime"] = summary.get("marketState", "-")
+    decision["scores"] = {
+        "market": factors["market"],
+        "newsTheme": factors["theme"],
+        "technical": factors["technical"],
+        "buyPoint": factors["liquidity"],
+        "valueQuality": factors["valueQuality"],
+        "riskControl": factors["riskControl"],
+        "riskPenalty": factors["eventRiskPenalty"],
+    }
+    decision["scoreModel"] = "多因子评分：市场10%、主题15%、流动性15%、技术动量25%、估值质量15%、风险控制20%，再扣事件风险。"
+
+
+def period_return(closes, period):
+    if len(closes) <= period or closes[-period - 1] == 0:
+        return 0
+    return (closes[-1] / closes[-period - 1] - 1) * 100
+
+
+def average(values):
+    cleaned = [value for value in values if isinstance(value, (int, float)) and not math.isnan(value)]
+    return sum(cleaned) / len(cleaned) if cleaned else 0
+
+
+def ema(values, period):
+    if not values:
+        return []
+    alpha = 2 / (period + 1)
+    result = [values[0]]
+    for value in values[1:]:
+        result.append(value * alpha + result[-1] * (1 - alpha))
+    return result
+
+
+def macd_histogram(closes):
+    if len(closes) < 35:
+        return 0
+    ema12 = ema(closes, 12)
+    ema26 = ema(closes, 26)
+    macd_line = [fast - slow for fast, slow in zip(ema12, ema26)]
+    signal = ema(macd_line, 9)
+    return macd_line[-1] - signal[-1] if signal else 0
+
+
+def rsi14(closes):
+    if len(closes) < 15:
+        return 50
+    gains = []
+    losses = []
+    for prev, current in zip(closes[-15:-1], closes[-14:]):
+        delta = current - prev
+        gains.append(max(delta, 0))
+        losses.append(max(-delta, 0))
+    avg_gain = average(gains)
+    avg_loss = average(losses)
+    if avg_loss == 0:
+        return 100 if avg_gain > 0 else 50
+    rs = avg_gain / avg_loss
+    return 100 - (100 / (1 + rs))
+
+
+def atr14(history):
+    if len(history) < 2:
+        return 0
+    true_ranges = []
+    for prev, current in zip(history[-15:-1], history[-14:]):
+        high = pick_number(current, "high")
+        low = pick_number(current, "low")
+        prev_close = pick_number(prev, "close")
+        true_ranges.append(max(high - low, abs(high - prev_close), abs(low - prev_close)))
+    return average(true_ranges)
+
+
+def detect_vcp(history):
+    if len(history) < 30:
+        return "样本不足"
+    ranges = []
+    closes = [pick_number(item, "close") for item in history]
+    for offset in (30, 20, 10):
+        window = history[-offset : -(offset - 10) if offset > 10 else None]
+        window_high = max([pick_number(item, "high") for item in window] or [0])
+        window_low = min([pick_number(item, "low") for item in window] or [0])
+        base = average([pick_number(item, "close") for item in window])
+        ranges.append((window_high - window_low) / base if base else 0)
+    near_high = closes[-1] >= max(closes[-30:]) * 0.92 if closes else False
+    if ranges[0] > ranges[1] > ranges[2] and near_high:
+        return "收敛"
+    if near_high:
+        return "高位整理"
+    return "未成形"
+
+
+def strategy_row(row, factors, summary):
+    total = factors["total"]
+    turnover_score = factors["liquidity"]
+    theme_score = factors["theme"]
+    strength_score = factors["technical"]
+    valuation_score = factors["valueQuality"]
+    risk_penalty = factors["eventRiskPenalty"]
     price = row["lastPrice"]
     change = row["changeRate"]
     high = row.get("high") or price
@@ -553,6 +882,7 @@ def strategy_row(row, total, turnover_score, theme_score, strength_score, valuat
     return {
         **row,
         "signalLight": signal,
+        "factorScores": factors,
         "stockState": stock_state,
         "pivotStage": "日内强势" if change >= 3 else "趋势观察",
         "buyPointType": buy_type,

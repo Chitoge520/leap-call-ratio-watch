@@ -319,9 +319,9 @@ async function loadCnReview({ silent = false } = {}) {
   }
 }
 
-async function loadCnReviewForDate({ silent = false } = {}) {
+async function loadCnReviewForDate({ silent = false, requireDate = true } = {}) {
   const date = els.cnReviewDate?.value || "";
-  if (!date) {
+  if (requireDate && !date) {
     alert("请先选择一个交易日期。");
     return;
   }
@@ -335,14 +335,15 @@ async function loadCnReviewForDate({ silent = false } = {}) {
       button.textContent = "获取中...";
     }
     if (refreshButton) refreshButton.disabled = true;
-    if (els.cnReviewHeadline) els.cnReviewHeadline.textContent = `正在获取 ${date} 的A股复盘数据...`;
-    const response = await fetch(`/api/cn-review/run?date=${encodeURIComponent(date)}`, { cache: "no-store" });
+    if (els.cnReviewHeadline) els.cnReviewHeadline.textContent = date ? `正在获取 ${date} 的A股复盘数据...` : "正在从 Tushare 获取最近交易日A股复盘数据...";
+    const query = date ? `?date=${encodeURIComponent(date)}` : "";
+    const response = await fetch(`/api/cn-review/run${query}`, { cache: "no-store" });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error || "该日期复盘生成失败");
     if (requestId !== cnReviewRequestId) return;
     cnReview = payload;
     renderCnReview();
-    if (!silent) alert(`已生成 ${date} 的A股复盘。`);
+    if (!silent) alert(date ? `已生成 ${date} 的A股复盘。` : "已生成最近交易日A股复盘。");
   } catch (error) {
     if (requestId !== cnReviewRequestId) return;
     renderCnReviewError(error.message);
@@ -374,7 +375,8 @@ function renderCnReview() {
     ["上涨/下跌", `${summary.advancers ?? 0} / ${summary.decliners ?? 0}`],
     ["涨停/跌停", `${summary.limitUp ?? 0} / ${summary.limitDown ?? 0}`],
     ["成交额", compactCn(summary.totalTurnover)],
-    ["覆盖股票", `${summary.stockCoverage ?? 0}`]
+    ["覆盖股票", `${summary.stockCoverage ?? 0}`],
+    ["策略K线", `${summary.strategyTechnicalCoverage ?? 0} / ${(cnReview.strategyCandidates || []).length}`]
   ].map(([label, value]) => `<article><span>${label}</span><strong>${value}</strong></article>`).join("");
 
   els.cnIndexGrid.innerHTML = (cnReview.indices || []).map((row) => `
@@ -496,12 +498,15 @@ function renderStrategyDetailRow(row) {
           <section>
             <h4>分项得分</h4>
             <div class="strategy-score-bars">
-              ${renderScoreBar("消息/主题", scores.newsTheme)}
+              ${renderScoreBar("市场环境", scores.market)}
+              ${renderScoreBar("主题强度", scores.newsTheme)}
+              ${renderScoreBar("流动性", scores.buyPoint)}
               ${renderScoreBar("技术面", scores.technical)}
-              ${renderScoreBar("买点", scores.buyPoint)}
-              ${renderScoreBar("市场", scores.market)}
+              ${renderScoreBar("估值质量", scores.valueQuality)}
+              ${renderScoreBar("风险控制", scores.riskControl)}
               ${renderScoreBar("风险扣分", scores.riskPenalty, true)}
             </div>
+            <p>${decision.scoreModel || ""}</p>
           </section>
           <section>
             <h4>技术读数</h4>
@@ -1477,8 +1482,7 @@ els.loadHkReport?.addEventListener("click", () => {
   loadGeneratedReport({ market: "HK" });
 });
 els.refreshCnReview?.addEventListener("click", () => {
-  if (els.cnReviewDate?.value) loadCnReviewForDate();
-  else loadCnReview();
+  loadCnReviewForDate({ requireDate: false });
 });
 els.loadCnReviewDate?.addEventListener("click", () => {
   loadCnReviewForDate();

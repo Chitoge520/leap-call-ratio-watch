@@ -74,13 +74,14 @@ async function handleApi(url, response) {
   }
 
   if (url.pathname === "/api/cn-review/run") {
-    const requestedDate = normalizeCnReviewDate(url.searchParams.get("date"));
-    if (!requestedDate) {
-      sendJson(response, 400, { error: "date is required. Use YYYY-MM-DD or YYYYMMDD." });
+    const rawDate = url.searchParams.get("date");
+    const requestedDate = rawDate ? normalizeCnReviewDate(rawDate) : "";
+    if (rawDate && !requestedDate) {
+      sendJson(response, 400, { error: "date must use YYYY-MM-DD or YYYYMMDD." });
       return;
     }
     await runProcess("python", ["scripts/cn_review.py"], {
-      envOverrides: { CN_REVIEW_TRADE_DATE: requestedDate }
+      envOverrides: requestedDate ? { CN_REVIEW_TRADE_DATE: requestedDate } : {}
     });
     const reviewPath = path.join(root, "data", "latest-cn-review.json");
     if (!existsSync(reviewPath)) {
