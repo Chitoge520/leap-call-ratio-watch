@@ -116,6 +116,7 @@ let selectedTicker = records[0]?.ticker || "";
 let topOptionAlerts = [];
 let cnReview = null;
 let expandedStrategyCode = "";
+let cnReviewRequestId = 0;
 
 const els = {
   pageTitle: document.querySelector("#pageTitle"),
@@ -153,6 +154,8 @@ const els = {
   backtestSignalRows: document.querySelector("#backtestSignalRows"),
   backtestTicker: document.querySelector("#backtestTicker"),
   backtestHorizon: document.querySelector("#backtestHorizon"),
+  cnReviewDate: document.querySelector("#cnReviewDate"),
+  loadCnReviewDate: document.querySelector("#loadCnReviewDate"),
   refreshCnReview: document.querySelector("#refreshCnReview"),
   cnReviewHeadline: document.querySelector("#cnReviewHeadline"),
   cnReviewMeta: document.querySelector("#cnReviewMeta"),
@@ -316,6 +319,43 @@ async function loadCnReview({ silent = false } = {}) {
   }
 }
 
+async function loadCnReviewForDate({ silent = false } = {}) {
+  const date = els.cnReviewDate?.value || "";
+  if (!date) {
+    alert("请先选择一个交易日期。");
+    return;
+  }
+  const requestId = ++cnReviewRequestId;
+  const button = els.loadCnReviewDate;
+  const refreshButton = els.refreshCnReview;
+  const previousText = button?.textContent || "";
+  try {
+    if (button) {
+      button.disabled = true;
+      button.textContent = "获取中...";
+    }
+    if (refreshButton) refreshButton.disabled = true;
+    if (els.cnReviewHeadline) els.cnReviewHeadline.textContent = `正在获取 ${date} 的A股复盘数据...`;
+    const response = await fetch(`/api/cn-review/run?date=${encodeURIComponent(date)}`, { cache: "no-store" });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || "该日期复盘生成失败");
+    if (requestId !== cnReviewRequestId) return;
+    cnReview = payload;
+    renderCnReview();
+    if (!silent) alert(`已生成 ${date} 的A股复盘。`);
+  } catch (error) {
+    if (requestId !== cnReviewRequestId) return;
+    renderCnReviewError(error.message);
+    if (!silent) alert(`${error.message}。如果是 Tushare 频控，请稍后重试或换一个已缓存日期。`);
+  } finally {
+    if (requestId === cnReviewRequestId && button) {
+      button.disabled = false;
+      button.textContent = previousText || "获取该日期";
+    }
+    if (requestId === cnReviewRequestId && refreshButton) refreshButton.disabled = false;
+  }
+}
+
 function renderCnReview() {
   if (!els.cnReviewHeadline) return;
   if (!cnReview) {
@@ -324,6 +364,9 @@ function renderCnReview() {
   }
   const summary = cnReview.summary || {};
   const playbook = cnReview.playbook || {};
+  if (els.cnReviewDate && summary.reviewDate) {
+    els.cnReviewDate.value = summary.reviewDate;
+  }
   els.cnReviewHeadline.textContent = playbook.headline || "A股全面复盘已生成。";
   els.cnReviewMeta.innerHTML = [
     ["市场状态", summary.marketState || "-"],
@@ -1434,7 +1477,14 @@ els.loadHkReport?.addEventListener("click", () => {
   loadGeneratedReport({ market: "HK" });
 });
 els.refreshCnReview?.addEventListener("click", () => {
-  loadCnReview();
+  if (els.cnReviewDate?.value) loadCnReviewForDate();
+  else loadCnReview();
+});
+els.loadCnReviewDate?.addEventListener("click", () => {
+  loadCnReviewForDate();
+});
+els.cnReviewDate?.addEventListener("change", () => {
+  if (els.cnReviewDate.value) loadCnReviewForDate({ silent: true });
 });
 
 els.refreshHistory?.addEventListener("click", renderHistoryReports);

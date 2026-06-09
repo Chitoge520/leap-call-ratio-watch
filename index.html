@@ -360,7 +360,11 @@
               <h3>A股全面复盘</h3>
               <p id="cnReviewHeadline">等待生成复盘。</p>
             </div>
-            <button id="refreshCnReview" class="secondary" type="button">刷新复盘</button>
+            <div class="cn-review-actions">
+              <input id="cnReviewDate" type="date" aria-label="选择A股复盘日期">
+              <button id="loadCnReviewDate" class="primary" type="button">获取该日期</button>
+              <button id="refreshCnReview" class="secondary" type="button">刷新复盘</button>
+            </div>
           </section>
 
           <div id="cnReviewMeta" class="cn-review-meta"></div>

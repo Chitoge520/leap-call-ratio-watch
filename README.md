@@ -1,5 +1,38 @@
 # LEAP Call Ratio Watch
 
+## A股数据源：Tushare
+
+`npm run review:cn` 现在使用 Tushare HTTP API 生成 A股全面复盘，不再依赖 Futu OpenD 的 A股快照。输出路径仍然保持不变：
+
+```text
+data/latest-cn-review.json
+reports/YYYY-MM-DD-cn-market-review.md
+reports/YYYY-MM-DD-cn-market-review.html
+```
+
+在 `.env` 中配置：
+
+```text
+TUSHARE_TOKEN=your_tushare_token
+CN_REVIEW_MAX_STOCKS=5000
+CN_REVIEW_TRADE_DATE=
+TUSHARE_SLEEP_MS=250
+TUSHARE_RETRIES=3
+TUSHARE_RETRY_DELAY_MS=1500
+CN_REVIEW_FETCH_ALL_INDICES=0
+```
+
+- `TUSHARE_TOKEN`：Tushare token。
+- `CN_REVIEW_MAX_STOCKS`：A股复盘最多覆盖的股票数量，默认 5000。
+- `CN_REVIEW_TRADE_DATE`：可选，指定交易日，格式 `YYYYMMDD`；为空时自动取最近一个 A股交易日。
+- `TUSHARE_SLEEP_MS`：每次 Tushare 请求后的等待时间，默认 250ms，用于降低触发频控的概率。
+- `TUSHARE_RETRIES` / `TUSHARE_RETRY_DELAY_MS`：Tushare 请求失败时的重试次数和退避间隔。
+- `CN_REVIEW_FETCH_ALL_INDICES=0`：低权限 token 默认只取上证指数，避免 `index_daily` 连续请求触发频控；如果权限足够可设为 `1`。
+
+当前复盘使用 `stock_basic`、`trade_cal`、`daily`、`daily_basic`、`index_daily` 等接口，适合盘后研究。策略候选仍然是正股买入/卖出计划，不输出期权交易建议。
+
+低权限 Tushare token 可能遇到 `1次/分钟` 或 `1次/小时` 的接口频控。脚本会把成功返回的接口缓存到 `data/tushare-cache/`，后续遇到频控时优先复用缓存；如果 `stock_basic` 暂时被限频，会先用 `daily` 的真实日线数据生成报告，名称字段临时显示为代码，等基础资料接口恢复后会自动补回股票名称和行业。
+
 本项目是一个本地运行的股票期权异动研究系统。主流程使用 Futu OpenD 扫描美股市场中“单独股票”的期权成交量异动 Top5，生成股票研究报告；同时支持港股市场的单独股票期权异动 Top5 扫描和 AI 研究报告。回测功能目前已暂停。
 
 期权只作为资金流和研究线索，不输出期权买卖建议。回测验证的是正股买卖表现，不是期权合约收益。

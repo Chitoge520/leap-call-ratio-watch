@@ -712,6 +712,23 @@ tbody tr:hover {
   margin: 0;
 }
 
+.cn-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.cn-review-actions input {
+  min-width: 158px;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+}
+
 .cn-review-meta,
 .cn-index-grid,
 .cn-theme-grid,
@@ -1218,6 +1235,10 @@ textarea {
   .cn-review-hero {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .cn-review-actions {
+    justify-content: flex-start;
   }
 }
 

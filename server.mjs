@@ -73,6 +73,24 @@ async function handleApi(url, response) {
     return;
   }
 
+  if (url.pathname === "/api/cn-review/run") {
+    const requestedDate = normalizeCnReviewDate(url.searchParams.get("date"));
+    if (!requestedDate) {
+      sendJson(response, 400, { error: "date is required. Use YYYY-MM-DD or YYYYMMDD." });
+      return;
+    }
+    await runProcess("python", ["scripts/cn_review.py"], {
+      envOverrides: { CN_REVIEW_TRADE_DATE: requestedDate }
+    });
+    const reviewPath = path.join(root, "data", "latest-cn-review.json");
+    if (!existsSync(reviewPath)) {
+      sendJson(response, 500, { error: "A-share review did not generate data/latest-cn-review.json." });
+      return;
+    }
+    sendJson(response, 200, JSON.parse(readFileSync(reviewPath, "utf8")));
+    return;
+  }
+
   if (url.pathname === "/api/deepseek/balance") {
     const force = url.searchParams.get("force") === "1";
     const balance = await refreshDeepSeekBalance({ force });
@@ -352,9 +370,9 @@ function startScheduler() {
   persistJobState();
   refreshDeepSeekBalance().catch(() => {});
   setInterval(() => refreshDeepSeekBalance().catch(() => {}), deepSeekBalanceCacheMs);
+  if (!autoScanEnabled && !autoPremarketEnabled && !autoHkScanEnabled) return;
   setTimeout(refreshOpenDStatus, 1000);
   setInterval(refreshOpenDStatus, 5 * 60_000);
-  if (!autoScanEnabled && !autoPremarketEnabled && !autoHkScanEnabled) return;
   setTimeout(checkScheduler, 2500);
   setInterval(checkScheduler, 60_000);
 }
@@ -651,9 +669,9 @@ function extractJsonLine(text) {
   return line.trim();
 }
 
-function runProcess(command, args) {
+function runProcess(command, args, options = {}) {
   return new Promise((resolve, reject) => {
-    const env = buildChildEnv();
+    const env = { ...buildChildEnv(), ...(options.envOverrides || {}) };
     const child = spawn(command, args, { cwd: root, env, shell: process.platform === "win32" });
     let output = "";
     child.stdout.on("data", (chunk) => {
@@ -672,10 +690,20 @@ function runProcess(command, args) {
   });
 }
 
+function normalizeCnReviewDate(value) {
+  const text = String(value || "").trim();
+  if (/^\d{8}$/.test(text)) return text;
+  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return "";
+  return `${match[1]}${match[2]}${match[3]}`;
+}
+
 function buildChildEnv() {
   const userPath = process.env.Path || process.env.PATH || "";
+  const dotEnv = readDotenv(path.join(root, ".env"));
   const env = {
     ...process.env,
+    ...dotEnv,
     AUTO_SCAN_ENABLED: process.env.AUTO_SCAN_ENABLED || "1",
     FUTU_USE_OPTION_VOLUME_UNIVERSE: process.env.FUTU_USE_OPTION_VOLUME_UNIVERSE || "1",
     FUTU_OPTION_SCREEN_CONTRACTS: process.env.FUTU_OPTION_SCREEN_CONTRACTS || "500",
@@ -683,6 +711,7 @@ function buildChildEnv() {
     APPDATA: process.env.APPDATA || path.join(root, ".futu-appdata"),
     Path: userPath
   };
+  if (env.PATH && env.Path) delete env.PATH;
   return env;
 }
 
@@ -751,11 +780,17 @@ function addDaysIso(isoDate, days) {
 }
 
 function loadDotenv(filePath) {
-  if (!existsSync(filePath)) return;
+  Object.assign(process.env, readDotenv(filePath));
+}
+
+function readDotenv(filePath) {
+  if (!existsSync(filePath)) return {};
+  const env = {};
   for (const line of readFileSync(filePath, "utf8").split(/\r?\n/)) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#") || !trimmed.includes("=")) continue;
     const [key, ...rest] = trimmed.split("=");
-    process.env[key.trim()] ??= rest.join("=").trim().replace(/^['"]|['"]$/g, "");
+    env[key.trim()] = rest.join("=").trim().replace(/^['"]|['"]$/g, "");
   }
+  return env;
 }

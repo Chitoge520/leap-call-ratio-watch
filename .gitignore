@@ -9,6 +9,9 @@ reports/
 data/*.db
 data/*.db-*
 data/job-status.json
+data/tushare-cache/
+data/tushare-stock-basic.json
+data/public-cn-stock-basic.json
 data/latest-cn-review.json
 data/latest-hk-report.json
 *.log
