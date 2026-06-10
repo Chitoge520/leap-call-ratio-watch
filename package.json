@@ -20,9 +20,14 @@
     "daily:futu": "node scripts/daily-futu-pipeline.mjs",
     "daily:futu:hk": "node scripts/daily-hk-futu-pipeline.mjs",
     "review:cn": "python scripts/cn_review.py",
-    "check": "node --check app.js && node --check server.mjs && node --check scripts/scan.mjs && node --check scripts/scan-alpha-vantage.mjs && node --check scripts/ai-analyze.mjs && node --check scripts/daily-futu-pipeline.mjs && node --check scripts/daily-hk-futu-pipeline.mjs && node --check scripts/premarket-futu-pipeline.mjs"
+    "research:import": "node scripts/research-import.mjs",
+    "research:analyze": "node scripts/research-analyze.mjs",
+    "research:refresh": "node scripts/research-refresh.mjs",
+    "check": "node --check app.js && node --check server.mjs && node --check scripts/scan.mjs && node --check scripts/scan-alpha-vantage.mjs && node --check scripts/ai-analyze.mjs && node --check scripts/daily-futu-pipeline.mjs && node --check scripts/daily-hk-futu-pipeline.mjs && node --check scripts/premarket-futu-pipeline.mjs && node --check scripts/research-core.mjs && node --check scripts/research-import.mjs && node --check scripts/research-analyze.mjs && node --check scripts/research-refresh.mjs"
   },
   "dependencies": {
+    "mysql2": "^3.22.5",
+    "pdf-parse": "^2.4.5",
     "sqlite3": "^5.1.7"
   }
 }

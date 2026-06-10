@@ -4,6 +4,13 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import sqlite3 from "sqlite3";
+import {
+  getLatestResearchSelection,
+  importResearchReportBuffers,
+  importResearchReportsFromDirectory,
+  listResearchReports,
+  runResearchSelection
+} from "./scripts/research-core.mjs";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 loadDotenv(path.join(root, ".env"));
@@ -45,7 +52,7 @@ createServer(async (request, response) => {
   const url = new URL(request.url, `http://localhost:${port}`);
   try {
     if (url.pathname.startsWith("/api/")) {
-      await handleApi(url, response);
+      await handleApi(url, response, request);
       return;
     }
     serveStatic(url, response);
@@ -57,7 +64,7 @@ createServer(async (request, response) => {
   startScheduler();
 });
 
-async function handleApi(url, response) {
+async function handleApi(url, response, request) {
   if (url.pathname === "/api/job/status") {
     sendJson(response, 200, buildPublicJobState());
     return;
@@ -96,6 +103,45 @@ async function handleApi(url, response) {
     const force = url.searchParams.get("force") === "1";
     const balance = await refreshDeepSeekBalance({ force });
     sendJson(response, 200, balance);
+    return;
+  }
+
+  if (url.pathname === "/api/research-reports" && request.method === "GET") {
+    const reports = await listResearchReports();
+    sendJson(response, 200, reports);
+    return;
+  }
+
+  if (url.pathname === "/api/research-selection/latest") {
+    const latest = await getLatestResearchSelection();
+    if (!latest) {
+      sendJson(response, 404, { error: "Research selection not found. Run npm run research:analyze first." });
+      return;
+    }
+    sendJson(response, 200, latest);
+    return;
+  }
+
+  if (url.pathname === "/api/research-reports/import" && request.method === "POST") {
+    const result = await importResearchReportsFromDirectory();
+    sendJson(response, 200, result);
+    return;
+  }
+
+  if (url.pathname === "/api/research-reports/upload" && request.method === "POST") {
+    const files = await readMultipartPdfFiles(request);
+    if (!files.length) {
+      sendJson(response, 400, { error: "No PDF files found in upload." });
+      return;
+    }
+    const result = await importResearchReportBuffers(files);
+    sendJson(response, 200, result);
+    return;
+  }
+
+  if (url.pathname === "/api/research-selection/run" && request.method === "POST") {
+    const result = await runResearchSelection();
+    sendJson(response, 200, result);
     return;
   }
 
@@ -244,6 +290,43 @@ function serveStatic(url, response) {
 function sendJson(response, status, payload) {
   response.writeHead(status, { "content-type": "application/json; charset=utf-8" });
   response.end(JSON.stringify(payload));
+}
+
+async function readMultipartPdfFiles(request) {
+  const contentType = request.headers["content-type"] || "";
+  const boundaryMatch = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/i);
+  if (!boundaryMatch) throw new Error("multipart/form-data boundary is required.");
+  const boundary = Buffer.from(`--${boundaryMatch[1] || boundaryMatch[2]}`);
+  const body = await readRequestBuffer(request);
+  const files = [];
+  let start = body.indexOf(boundary);
+  while (start >= 0) {
+    const next = body.indexOf(boundary, start + boundary.length);
+    if (next < 0) break;
+    const part = body.subarray(start + boundary.length + 2, next - 2);
+    const separator = Buffer.from("\r\n\r\n");
+    const headerEnd = part.indexOf(separator);
+    if (headerEnd > 0) {
+      const headers = part.subarray(0, headerEnd).toString("utf8");
+      const fileNameMatch = headers.match(/filename="([^"]+)"/i);
+      const content = part.subarray(headerEnd + separator.length);
+      const fileName = fileNameMatch?.[1] || "";
+      if (fileName.toLowerCase().endsWith(".pdf") && content.length > 0) {
+        files.push({ fileName, buffer: content });
+      }
+    }
+    start = next;
+  }
+  return files;
+}
+
+function readRequestBuffer(request) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    request.on("data", (chunk) => chunks.push(chunk));
+    request.on("end", () => resolve(Buffer.concat(chunks)));
+    request.on("error", reject);
+  });
 }
 
 function openDb() {

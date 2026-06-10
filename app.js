@@ -117,6 +117,11 @@ let topOptionAlerts = [];
 let cnReview = null;
 let expandedStrategyCode = "";
 let cnReviewRequestId = 0;
+let researchSelection = null;
+let researchReports = [];
+let expandedResearchCandidate = "";
+
+ensureResearchSelectionUiClean();
 
 const els = {
   pageTitle: document.querySelector("#pageTitle"),
@@ -165,8 +170,82 @@ const els = {
   cnPlaybook: document.querySelector("#cnPlaybook"),
   cnLeaderRows: document.querySelector("#cnLeaderRows"),
   cnActiveRows: document.querySelector("#cnActiveRows"),
-  cnDataGaps: document.querySelector("#cnDataGaps")
+  cnDataGaps: document.querySelector("#cnDataGaps"),
+  researchReportFiles: document.querySelector("#researchReportFiles"),
+  uploadResearchReports: document.querySelector("#uploadResearchReports"),
+  importResearchReports: document.querySelector("#importResearchReports"),
+  runResearchSelection: document.querySelector("#runResearchSelection"),
+  refreshResearchSelection: document.querySelector("#refreshResearchSelection"),
+  researchSelectionHeadline: document.querySelector("#researchSelectionHeadline"),
+  researchSelectionMeta: document.querySelector("#researchSelectionMeta"),
+  researchCandidateRows: document.querySelector("#researchCandidateRows"),
+  researchReportRows: document.querySelector("#researchReportRows"),
+  researchThemeGrid: document.querySelector("#researchThemeGrid")
 };
+
+function ensureResearchSelectionUiClean() {
+  if (!document.querySelector('[data-view="researchSelection"]')) {
+    const cnButton = document.querySelector('[data-view="cnReview"]');
+    cnButton?.insertAdjacentHTML("afterend", `<button class="nav-button" data-view="researchSelection">研报选股</button>`);
+  }
+  if (!document.querySelector("#researchSelectionView")) {
+    const framework = document.querySelector("#frameworkView");
+    framework?.insertAdjacentHTML("beforebegin", `
+      <section id="researchSelectionView" class="view">
+        <section class="cn-review-hero">
+          <div>
+            <p class="eyebrow">Research Driven Selection</p>
+            <h3>研报驱动选股</h3>
+            <p id="researchSelectionHeadline">等待导入研报并运行分析。</p>
+          </div>
+          <div class="cn-review-actions">
+            <input id="researchReportFiles" type="file" accept="application/pdf,.pdf" multiple />
+            <button id="uploadResearchReports" class="primary" type="button">上传PDF</button>
+            <button id="importResearchReports" class="secondary" type="button">导入目录</button>
+            <button id="runResearchSelection" class="secondary" type="button">运行分析</button>
+            <button id="refreshResearchSelection" class="secondary" type="button">刷新结果</button>
+          </div>
+        </section>
+        <div id="researchSelectionMeta" class="cn-review-meta"></div>
+        <section class="cn-strategy-panel">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Four Layer Logic</p>
+              <h3>主线 + 涨价逻辑 + 壁垒 + 技术确认</h3>
+            </div>
+            <span>先并行验证，不替换现有A股策略榜</span>
+          </div>
+          <div class="strategy-table-wrap">
+            <table class="strategy-table">
+              <thead>
+                <tr>
+                  <th>排名</th><th>公司</th><th>代码</th><th>主线</th><th>行业</th><th>环节</th>
+                  <th>总分</th><th>主线</th><th>涨价</th><th>壁垒</th><th>证据</th><th>技术</th><th>可交易</th>
+                </tr>
+              </thead>
+              <tbody id="researchCandidateRows"></tbody>
+            </table>
+          </div>
+        </section>
+        <div class="cn-review-tables">
+          <section class="form-card">
+            <h3>研报库</h3>
+            <div class="table-frame compact-frame">
+              <table class="history-table">
+                <thead><tr><th>文件</th><th>标题</th><th>状态</th><th>文字数</th><th>上传时间</th></tr></thead>
+                <tbody id="researchReportRows"></tbody>
+              </table>
+            </div>
+          </section>
+          <section class="form-card">
+            <h3>主线共识</h3>
+            <div id="researchThemeGrid" class="cn-theme-grid"></div>
+          </section>
+        </div>
+      </section>
+    `);
+  }
+}
 
 function loadRecords() {
   const saved = localStorage.getItem(STORAGE_KEY);
@@ -1384,6 +1463,229 @@ function renderPlainList(items) {
   return `<ul>${items.map((item) => `<li>${item}</li>`).join("")}</ul>`;
 }
 
+async function loadResearchSelection({ silent = false } = {}) {
+  if (!els.researchSelectionHeadline) return;
+  try {
+    const [selectionResponse, reportsResponse] = await Promise.all([
+      fetch("/api/research-selection/latest", { cache: "no-store" }),
+      fetch("/api/research-reports", { cache: "no-store" })
+    ]);
+    if (!selectionResponse.ok) throw new Error((await selectionResponse.json()).error || "读取研报选股结果失败");
+    if (!reportsResponse.ok) throw new Error((await reportsResponse.json()).error || "读取研报库失败");
+    const selectionPayload = await selectionResponse.json();
+    const reportsPayload = await reportsResponse.json();
+    researchSelection = selectionPayload.selection || null;
+    researchReports = reportsPayload.reports || [];
+    renderResearchSelection();
+  } catch (error) {
+    renderResearchSelectionError(error.message);
+    if (!silent) alert(error.message);
+  }
+}
+
+async function uploadResearchReportFiles() {
+  const files = Array.from(els.researchReportFiles?.files || []);
+  if (!files.length) {
+    alert("请选择要上传的 PDF 研报。");
+    return;
+  }
+  const form = new FormData();
+  files.forEach((file) => form.append("files", file));
+  await runResearchAction(els.uploadResearchReports, "上传中...", async () => {
+    const response = await fetch("/api/research-reports/upload", { method: "POST", body: form });
+    if (!response.ok) throw new Error((await response.json()).error || "上传失败");
+    const payload = await response.json();
+    alert(`已处理 ${payload.imported?.length || 0} 份研报。`);
+  });
+}
+
+async function importResearchReportDirectory() {
+  await runResearchAction(els.importResearchReports, "导入中...", async () => {
+    const response = await fetch("/api/research-reports/import", { method: "POST" });
+    if (!response.ok) throw new Error((await response.json()).error || "目录导入失败");
+    const payload = await response.json();
+    alert(`已从目录导入 ${payload.imported?.length || 0} 份研报。`);
+  });
+}
+
+async function runResearchSelectionAnalysis() {
+  await runResearchAction(els.runResearchSelection, "分析中...", async () => {
+    const response = await fetch("/api/research-selection/run", { method: "POST" });
+    if (!response.ok) throw new Error((await response.json()).error || "研报分析失败");
+    const payload = await response.json();
+    researchSelection = payload.selection || null;
+  });
+}
+
+async function runResearchAction(button, busyText, action) {
+  const previousText = button?.textContent || "";
+  try {
+    if (button) {
+      button.disabled = true;
+      button.textContent = busyText;
+    }
+    await action();
+    await loadResearchSelection({ silent: true });
+  } catch (error) {
+    renderResearchSelectionError(error.message);
+    alert(error.message);
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = previousText;
+    }
+  }
+}
+
+function renderResearchSelection(reports = researchReports) {
+  if (!els.researchSelectionHeadline) return;
+  const summary = researchSelection?.summary || {};
+  const candidates = researchSelection?.candidates || [];
+  const themes = researchSelection?.themes || [];
+  const aiStatus = researchSelection?.aiStatus || {};
+  els.researchSelectionHeadline.textContent = researchSelection
+    ? `最新批次 ${summary.runDate || "-"}：${candidates.length} 个候选，来自 ${summary.reportCount ?? 0} 份研报。`
+    : "暂无研报选股结果。请先导入研报并运行分析。";
+  els.researchSelectionMeta.innerHTML = [
+    ["研报数", summary.reportCount ?? reports.length],
+    ["候选数", candidates.length],
+    ["AI状态", aiStatus.status || "unknown"],
+    ["模型", researchSelection?.model || "-"],
+    ["更新时间", summary.generatedAt ? String(summary.generatedAt).slice(0, 19).replace("T", " ") : "-"]
+  ].map(([label, value]) => `<article><span>${label}</span><strong>${escapeHtmlText(value)}</strong></article>`).join("");
+
+  els.researchThemeGrid.innerHTML = themes.length
+    ? themes.slice(0, 8).map((theme) => `
+      <article>
+        <div class="cn-theme-head">
+          <strong>${escapeHtmlText(theme.theme || "-")}</strong>
+          <span>${number(theme.count).toFixed(0)}</span>
+        </div>
+        <p>研报共识密度：${number(theme.count).toFixed(0)} 条证据</p>
+      </article>
+    `).join("")
+    : `<article><strong>暂无主线</strong><p>导入可抽文本 PDF 后运行分析。</p></article>`;
+
+  els.researchReportRows.innerHTML = reports.length
+    ? reports.map((report) => `
+      <tr>
+        <td><strong>${escapeHtmlText(report.fileName || "-")}</strong><div class="small">${escapeHtmlText(report.broker || "")}</div></td>
+        <td>${escapeHtmlText(report.title || "-")}<div class="small">${escapeHtmlText(report.errorMessage || "")}</div></td>
+        <td>${strategyPill(report.status || "-", researchStatusTone(report.status))}</td>
+        <td>${compactNumber(report.textChars || 0)}</td>
+        <td>${report.uploadedAt ? String(report.uploadedAt).slice(0, 19).replace("T", " ") : "-"}</td>
+      </tr>
+    `).join("")
+    : `<tr><td colspan="5">研报库为空。可上传 PDF，或把 PDF 放入 <code>data/research-inbox</code> 后点击导入目录。</td></tr>`;
+
+  els.researchCandidateRows.innerHTML = candidates.length
+    ? candidates.map((row, index) => {
+      const key = row.tsCode || row.name || String(index);
+      return `
+        <tr class="research-main-row ${expandedResearchCandidate === key ? "expanded" : ""}" data-key="${escapeHtmlText(key)}">
+          <td>${index + 1}</td>
+          <td><strong>${escapeHtmlText(row.name || "-")}</strong></td>
+          <td>${escapeHtmlText(row.tsCode || "-")}</td>
+          <td>${strategyPill(row.theme || "-", "neutral")}</td>
+          <td>${escapeHtmlText(row.industry || "-")}</td>
+          <td>${escapeHtmlText(row.chainSegment || "-")}</td>
+          <td><strong>${number(row.totalScore).toFixed(1)}</strong></td>
+          <td>${number(row.scores?.mainline).toFixed(1)}</td>
+          <td>${number(row.scores?.priceLogic).toFixed(1)}</td>
+          <td>${number(row.scores?.barrier).toFixed(1)}</td>
+          <td>${number(row.evidenceCount).toFixed(0)}</td>
+          <td>${number(row.scores?.technical).toFixed(1)}</td>
+          <td>${row.tradable ? "是" : "否"}</td>
+        </tr>
+        ${expandedResearchCandidate === key ? renderResearchCandidateDetail(row) : ""}
+      `;
+    }).join("")
+    : `<tr><td colspan="13">暂无候选。导入 3-5 篇可抽文本研报后运行分析。</td></tr>`;
+
+  document.querySelectorAll(".research-main-row[data-key]").forEach((row) => {
+    row.addEventListener("click", () => {
+      expandedResearchCandidate = expandedResearchCandidate === row.dataset.key ? "" : row.dataset.key;
+      renderResearchSelection(reports);
+    });
+  });
+}
+
+function renderResearchCandidateDetail(row) {
+  const technical = row.technical || {};
+  return `
+    <tr class="strategy-detail-row">
+      <td colspan="13">
+        <div class="strategy-detail-card">
+          <section>
+            <h4>四层逻辑</h4>
+            <p><strong>主线：</strong>${escapeHtmlText(row.theme || "-")}</p>
+            <p><strong>涨价逻辑：</strong>${escapeHtmlText(row.priceLogic || "-")}</p>
+            <p><strong>壁垒原因：</strong>${escapeHtmlText(row.barrierReason || "-")}</p>
+            <p><strong>公司确认：</strong>${escapeHtmlText(row.explanation || "-")}</p>
+          </section>
+          <section>
+            <h4>评分拆解</h4>
+            <div class="strategy-score-bars">
+              ${renderScoreBar("主线强度 20%", row.scores?.mainline)}
+              ${renderScoreBar("涨价逻辑 25%", row.scores?.priceLogic)}
+              ${renderScoreBar("壁垒质量 25%", row.scores?.barrier)}
+              ${renderScoreBar("公司证据 15%", row.scores?.companyEvidence)}
+              ${renderScoreBar("技术确认 15%", row.scores?.technical)}
+            </div>
+          </section>
+          <section>
+            <h4>研报证据</h4>
+            ${renderResearchEvidence(row.evidence)}
+          </section>
+          <section>
+            <h4>技术面确认</h4>
+            <div class="strategy-tech-list">
+              <span>趋势 ${escapeHtmlText(technical.trendState || "-")}</span>
+              <span>风险 ${escapeHtmlText(technical.riskState || "-")}</span>
+              <span>MA20 ${formatPrice(technical.technical?.ma20)}</span>
+              <span>MA60 ${formatPrice(technical.technical?.ma60)}</span>
+              <span>RSI ${formatPrice(technical.technical?.rsi14)}</span>
+              <span>量比 ${formatPrice(technical.technical?.volumeRatio)}</span>
+            </div>
+          </section>
+        </div>
+      </td>
+    </tr>
+  `;
+}
+
+function renderResearchEvidence(items) {
+  if (!Array.isArray(items) || !items.length) return "<p>暂无研报摘录。</p>";
+  return `<ul>${items.map((item) => `
+    <li><strong>${escapeHtmlText(item.reportTitle || `报告 ${item.reportId || ""}`)}</strong>：${escapeHtmlText(item.excerpt || "-")}</li>
+  `).join("")}</ul>`;
+}
+
+function renderResearchSelectionError(message) {
+  if (els.researchSelectionHeadline) els.researchSelectionHeadline.textContent = message;
+  if (els.researchSelectionMeta) els.researchSelectionMeta.innerHTML = "";
+  if (els.researchThemeGrid) els.researchThemeGrid.innerHTML = "";
+  if (els.researchCandidateRows) els.researchCandidateRows.innerHTML = `<tr><td colspan="13">${escapeHtmlText(message)}</td></tr>`;
+  if (els.researchReportRows) els.researchReportRows.innerHTML = `<tr><td colspan="5">${escapeHtmlText(message)}</td></tr>`;
+}
+
+function researchStatusTone(status) {
+  if (status === "parsed") return "green";
+  if (status === "duplicate") return "cream";
+  if (String(status || "").includes("failed")) return "red";
+  return "orange";
+}
+
+function escapeHtmlText(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  }[char]));
+}
+
 function renderNote() {
   const record = normalizeRecord(records.find((item) => item.ticker === selectedTicker) || records[0]);
   if (!record) return;
@@ -1399,6 +1701,7 @@ function renderAll() {
   renderNote();
   renderJobStatus();
   renderCnReview();
+  renderResearchSelection();
 }
 
 function switchView(view) {
@@ -1417,8 +1720,9 @@ function switchView(view) {
     pipeline: "数据录入",
     framework: "监控框架"
   };
-  els.pageTitle.textContent = titleMap[view];
+  els.pageTitle.textContent = view === "researchSelection" ? "研报驱动选股" : titleMap[view];
   if (view === "cnReview" && !cnReview) loadCnReview({ silent: true });
+  if (view === "researchSelection") loadResearchSelection({ silent: true });
   if (view === "history") renderHistoryReports();
 }
 
@@ -1490,6 +1794,10 @@ els.loadCnReviewDate?.addEventListener("click", () => {
 els.cnReviewDate?.addEventListener("change", () => {
   if (els.cnReviewDate.value) loadCnReviewForDate({ silent: true });
 });
+els.uploadResearchReports?.addEventListener("click", uploadResearchReportFiles);
+els.importResearchReports?.addEventListener("click", importResearchReportDirectory);
+els.runResearchSelection?.addEventListener("click", runResearchSelectionAnalysis);
+els.refreshResearchSelection?.addEventListener("click", () => loadResearchSelection());
 
 els.refreshHistory?.addEventListener("click", renderHistoryReports);
 // Backtest UI is temporarily disabled.
